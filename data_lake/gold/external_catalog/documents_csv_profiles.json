@@ -1,0 +1,740 @@
+[
+  {
+    "file_name": "KaDo.csv",
+    "path": "../Documents/KaDo.csv",
+    "size_bytes": 766688281,
+    "separator": ",",
+    "columns": [
+      "TICKET_ID",
+      "MOIS_VENTE",
+      "PRIX_NET",
+      "FAMILLE",
+      "UNIVERS",
+      "MAILLE",
+      "LIBELLE",
+      "CLI_ID"
+    ],
+    "sample_rows": 100000,
+    "dtypes": {
+      "TICKET_ID": "int64",
+      "MOIS_VENTE": "int64",
+      "PRIX_NET": "float64",
+      "FAMILLE": "object",
+      "UNIVERS": "object",
+      "MAILLE": "object",
+      "LIBELLE": "object",
+      "CLI_ID": "int64"
+    },
+    "sample_nulls": {
+      "TICKET_ID": 0,
+      "MOIS_VENTE": 0,
+      "PRIX_NET": 0,
+      "FAMILLE": 0,
+      "UNIVERS": 0,
+      "MAILLE": 0,
+      "LIBELLE": 0,
+      "CLI_ID": 0
+    },
+    "sample_unique_counts": {
+      "TICKET_ID": 41496,
+      "MOIS_VENTE": 12,
+      "PRIX_NET": 851,
+      "FAMILLE": 8,
+      "UNIVERS": 97,
+      "MAILLE": 33,
+      "LIBELLE": 1210,
+      "CLI_ID": 7506
+    },
+    "top_values": {
+      "MOIS_VENTE": {
+        "1": 10488,
+        "12": 10249,
+        "6": 9518,
+        "7": 9404,
+        "9": 9164,
+        "8": 8269,
+        "5": 7774,
+        "4": 7616
+      },
+      "FAMILLE": {
+        "SOINS DU VISAGE": 28129,
+        "HYGIENE": 24531,
+        "MAQUILLAGE": 20312,
+        "SOINS DU CORPS": 12841,
+        "PARFUMAGE": 7995,
+        "CAPILLAIRES": 3827,
+        "SOLAIRES": 2363,
+        "MULTI FAMILLES": 2
+      },
+      "UNIVERS": {
+        "HYG_DOUCHE JARDINMONDE": 8713,
+        "VIS_CJOUR AAAR": 6321,
+        "CORPS_HYDRA NOURRISANT": 3681,
+        "HYG_DOUCHE PLAISIRNATURE": 3577,
+        "VIS_DEMAQ BLEUET": 3364,
+        "VIS_DEMAQ PUR": 3089,
+        "CORPS_SOIN DES MAINS": 3062,
+        "VIS_DEMAQ AAAR": 2902
+      },
+      "MAILLE": {
+        "HYG_JDM": 10106,
+        "CORPS_HYDRA_NOURRI_ET_SOINS": 9551,
+        "VIS_AAAR_HORS_DEMAQLOTION": 9422,
+        "VIS_JEUNE_ET_LEVRE": 7089,
+        "HYG_PLAISIRNAT_BAIN_SAVON": 6022,
+        "PARF_PARFUM": 5725,
+        "MAQ_ONGLES": 5197,
+        "MAQ_TEINT": 4224
+      },
+      "LIBELLE": {
+        "DEMAQ EXPRESS PUR BLEUET FL125ML": 3057,
+        "SVC REP LAIT REP T150ML": 1354,
+        "REPACK AR BIEN JOUR RC2 P 50ml": 1261,
+        "LINGETTES CALMILLE 2013": 1221,
+        "SVC CREME QUOTIDIENNE T75ml": 1066,
+        "FRAICHEUR CHEVREF EDC 125ML": 1054,
+        "25 LINGETTES DEFROISSANTES SV": 1049,
+        "DISSOLVANT FLACON MANUC CN3 100ML": 1004
+      }
+    },
+    "numeric_summary": {
+      "TICKET_ID": {
+        "count": 100000.0,
+        "mean": 34661343.8008,
+        "std": 1024484.5951,
+        "min": 32931717.0,
+        "25%": 33778495.0,
+        "50%": 34635285.0,
+        "75%": 35518802.0,
+        "max": 36529864.0
+      },
+      "MOIS_VENTE": {
+        "count": 100000.0,
+        "mean": 6.5254,
+        "std": 3.5005,
+        "min": 1.0,
+        "25%": 4.0,
+        "50%": 7.0,
+        "75%": 9.0,
+        "max": 12.0
+      },
+      "PRIX_NET": {
+        "count": 100000.0,
+        "mean": 7.0959,
+        "std": 6.796,
+        "min": 0.01,
+        "25%": 2.95,
+        "50%": 4.95,
+        "75%": 9.0,
+        "max": 270.0
+      },
+      "CLI_ID": {
+        "count": 100000.0,
+        "mean": 906368787.5876,
+        "std": 69323754.0461,
+        "min": 1490281.0,
+        "25%": 911624077.0,
+        "50%": 918624682.0,
+        "75%": 922505108.0,
+        "max": 932319384.0
+      }
+    },
+    "row_count": 7245522,
+    "domain": "Retail / customer purchases",
+    "business_summary": "Ticket-level cosmetic and hygiene product sales.",
+    "homepedia_fit": "Not useful for the HOMEPEDIA real-estate MVP.",
+    "recommended_use": "Keep as an external big-data practice dataset for segmentation, basket analysis, or retail BI.",
+    "null_counts": {
+      "TICKET_ID": 0,
+      "MOIS_VENTE": 0,
+      "PRIX_NET": 0,
+      "FAMILLE": 0,
+      "UNIVERS": 0,
+      "MAILLE": 0,
+      "LIBELLE": 0,
+      "CLI_ID": 0
+    },
+    "global_top_values": {
+      "FAMILLE": {
+        "HYGIENE": 2095077,
+        "MAQUILLAGE": 1694751,
+        "SOINS DU VISAGE": 1494034,
+        "SOINS DU CORPS": 878923,
+        "PARFUMAGE": 628087,
+        "CAPILLAIRES": 301365,
+        "SOLAIRES": 153254,
+        "MULTI FAMILLES": 30,
+        "SANTE NATURELLE": 1
+      }
+    },
+    "min_values": {
+      "MOIS_VENTE": "1"
+    },
+    "max_values": {
+      "MOIS_VENTE": "12"
+    },
+    "numeric_sums": {
+      "TICKET_ID": 251831858073793.0,
+      "MOIS_VENTE": 49561393.0,
+      "PRIX_NET": 43256372.18,
+      "CLI_ID": 7093818894726137.0
+    }
+  },
+  {
+    "file_name": "data_pathologies.csv",
+    "path": "../Documents/data_pathologies.csv",
+    "size_bytes": 524228641,
+    "separator": ";",
+    "columns": [
+      "annee",
+      "patho_niv1",
+      "patho_niv2",
+      "patho_niv3",
+      "top",
+      "cla_age_5",
+      "sexe",
+      "region",
+      "dept",
+      "Ntop",
+      "Npop",
+      "prev",
+      "Niveau prioritaire",
+      "libelle_classe_age",
+      "libelle_sexe",
+      "tri"
+    ],
+    "sample_rows": 100000,
+    "dtypes": {
+      "annee": "int64",
+      "patho_niv1": "object",
+      "patho_niv2": "object",
+      "patho_niv3": "object",
+      "top": "object",
+      "cla_age_5": "object",
+      "sexe": "int64",
+      "region": "int64",
+      "dept": "object",
+      "Ntop": "float64",
+      "Npop": "int64",
+      "prev": "float64",
+      "Niveau prioritaire": "object",
+      "libelle_classe_age": "object",
+      "libelle_sexe": "object",
+      "tri": "float64"
+    },
+    "sample_nulls": {
+      "annee": 0,
+      "patho_niv1": 0,
+      "patho_niv2": 17648,
+      "patho_niv3": 26316,
+      "top": 0,
+      "cla_age_5": 0,
+      "sexe": 0,
+      "region": 0,
+      "dept": 0,
+      "Ntop": 14352,
+      "Npop": 0,
+      "prev": 14352,
+      "Niveau prioritaire": 0,
+      "libelle_classe_age": 0,
+      "libelle_sexe": 0,
+      "tri": 0
+    },
+    "sample_unique_counts": {
+      "annee": 5,
+      "patho_niv1": 13,
+      "patho_niv2": 21,
+      "patho_niv3": 26,
+      "top": 37,
+      "cla_age_5": 21,
+      "sexe": 3,
+      "region": 19,
+      "dept": 102,
+      "Ntop": 4148,
+      "Npop": 10729,
+      "prev": 18873,
+      "Niveau prioritaire": 5,
+      "libelle_classe_age": 21,
+      "libelle_sexe": 3,
+      "tri": 37
+    },
+    "top_values": {
+      "annee": {
+        "2019": 33227,
+        "2016": 30172,
+        "2015": 19828,
+        "2020": 10173,
+        "2018": 6600
+      },
+      "patho_niv1": {
+        "Cancers": 31794,
+        "Maladies psychiatriques": 29797,
+        "Autres affections de longue durée (dont 31 et 32)": 5036,
+        "Hospitalisations ponctuelles (avec ou sans pathologies, traitements ou maternité)": 4998,
+        "Diabète": 4950,
+        "Maladies neurologiques ou dégénératives": 4331,
+        "Insuffisance rénale chronique terminale": 3547,
+        "Maladies respiratoires chroniques (hors mucoviscidose)": 3319
+      },
+      "patho_niv2": {
+        "Cancer colorectal": 9021,
+        "Cancer du sein de la femme": 5751,
+        "Cancer du poumon": 5513,
+        "Autres cancers": 5088,
+        "Autres affections de longue durée (dont 31 et 32)": 5036,
+        "Hospitalisations ponctuelles (avec ou sans pathologies, traitements ou maternité)": 4998,
+        "Diabète": 4950,
+        "Troubles névrotiques et de l'humeur": 4866
+      },
+      "patho_niv3": {
+        "Autres affections de longue durée (dont 31 et 32)": 5036,
+        "Hospitalisations ponctuelles (avec ou sans pathologies, traitements ou maternité)": 4998,
+        "Autres cancers sous surveillance": 4974,
+        "Diabète": 4950,
+        "Troubles névrotiques et de l'humeur": 4866,
+        "Autres troubles psychiatriques": 4817,
+        "Troubles psychotiques": 4477,
+        "Troubles psychiatriques ayant débuté dans l'enfance": 4441
+      },
+      "top": {
+        "sup_PsyPat_cat": 5071,
+        "top_ALDAutr_ind": 5036,
+        "sup_hospit_ponct": 4998,
+        "top_CanAutr_sur": 4974,
+        "top_FDiabet_ind": 4950,
+        "top_PDepNev_ind": 4866,
+        "top_PsyAutr_ind": 4817,
+        "top_Psychos_ind": 4477
+      },
+      "cla_age_5": {
+        "55-59": 5377,
+        "50-54": 5327,
+        "65-69": 5316,
+        "40-44": 5260,
+        "45-49": 5239,
+        "60-64": 5163,
+        "tsage": 5079,
+        "90-94": 5012
+      },
+      "sexe": {
+        "9": 35492,
+        "2": 32630,
+        "1": 31878
+      },
+      "region": {
+        "76": 11620,
+        "75": 10798,
+        "84": 10677,
+        "44": 9136,
+        "11": 7826,
+        "27": 7420,
+        "93": 5889,
+        "24": 5789
+      },
+      "dept": {
+        "999": 16292,
+        "33": 924,
+        "62": 921,
+        "14": 915,
+        "59": 901,
+        "974": 891,
+        "34": 888,
+        "78": 888
+      },
+      "Niveau prioritaire": {
+        "2,3": 33257,
+        "3": 21480,
+        "1,2,3": 18947,
+        "1": 17648,
+        "2": 8668
+      },
+      "libelle_classe_age": {
+        "de 55 à 59 ans": 5377,
+        "de 50 à 54 ans": 5327,
+        "de 65 à 69 ans": 5316,
+        "de 40 à 44 ans": 5260,
+        "de 45 à 49 ans": 5239,
+        "de 60 à 64 ans": 5163,
+        "tous âges": 5079,
+        "de 90 à 94 ans": 5012
+      },
+      "libelle_sexe": {
+        "tous sexes": 35492,
+        "femmes": 32630,
+        "hommes": 31878
+      }
+    },
+    "numeric_summary": {
+      "annee": {
+        "count": 100000.0,
+        "mean": 2017.3374,
+        "std": 1.8143,
+        "min": 2015.0,
+        "25%": 2016.0,
+        "50%": 2017.0,
+        "75%": 2019.0,
+        "max": 2020.0
+      },
+      "sexe": {
+        "count": 100000.0,
+        "mean": 4.1657,
+        "std": 3.6083,
+        "min": 1.0,
+        "25%": 1.0,
+        "50%": 2.0,
+        "75%": 9.0,
+        "max": 9.0
+      },
+      "region": {
+        "count": 100000.0,
+        "mean": 51.0359,
+        "std": 29.3573,
+        "min": 1.0,
+        "25%": 27.0,
+        "50%": 52.0,
+        "75%": 76.0,
+        "max": 99.0
+      },
+      "Ntop": {
+        "count": 85648.0,
+        "mean": 4788.904,
+        "std": 64418.5886,
+        "min": 10.0,
+        "25%": 70.0,
+        "50%": 270.0,
+        "75%": 1180.0,
+        "max": 9411750.0
+      },
+      "Npop": {
+        "count": 100000.0,
+        "mean": 109380.209,
+        "std": 1037863.1158,
+        "min": 20.0,
+        "25%": 7900.0,
+        "50%": 17460.0,
+        "75%": 43940.0,
+        "max": 66265100.0
+      },
+      "prev": {
+        "count": 85648.0,
+        "mean": 5.6249,
+        "std": 11.5515,
+        "min": 0.001,
+        "25%": 0.496,
+        "50%": 1.378,
+        "75%": 5.0612,
+        "max": 95.089
+      },
+      "tri": {
+        "count": 100000.0,
+        "mean": 32.9712,
+        "std": 21.6023,
+        "min": 1.0,
+        "25%": 12.0,
+        "50%": 38.0,
+        "75%": 49.0,
+        "max": 65.0
+      }
+    },
+    "row_count": 3063714,
+    "domain": "Public health / territorial indicators",
+    "business_summary": "Pathology prevalence by year, age class, sex, region, and department.",
+    "homepedia_fit": "Potential V3 territorial context only, not part of the MVP scoring.",
+    "recommended_use": "Could enrich territorial analysis at department/region level after the housing MVP is stable.",
+    "null_counts": {
+      "annee": 0,
+      "patho_niv1": 0,
+      "patho_niv2": 447600,
+      "patho_niv3": 832482,
+      "top": 0,
+      "cla_age_5": 0,
+      "sexe": 0,
+      "region": 0,
+      "dept": 0,
+      "Ntop": 572280,
+      "Npop": 0,
+      "prev": 572280,
+      "Niveau prioritaire": 0,
+      "libelle_classe_age": 0,
+      "libelle_sexe": 0,
+      "tri": 0
+    },
+    "global_top_values": {
+      "patho_niv1": {
+        "Maladies cardio-neurovasculaires": 627654,
+        "Cancers": 522616,
+        "Maladies inflammatoires ou rares ou VIH ou SIDA": 464809,
+        "Maladies neurologiques ou dégénératives": 330916,
+        "Maladies psychiatriques": 300622,
+        "Traitements psychotropes (hors pathologies)": 216876,
+        "Insuffisance rénale chronique terminale": 133294,
+        "Traitements du risque vasculaire (hors pathologies)": 131694,
+        "Pas de pathologies repérées, traitements, maternité, hospitalisations ni traitement antalgique ou anti-inflammatoire": 45360,
+        "Autres affections de longue durée (dont 31 et 32)": 45360
+      },
+      "libelle_sexe": {
+        "tous sexes": 1064170,
+        "femmes": 1004487,
+        "hommes": 995057
+      },
+      "region": {
+        "76": 350781,
+        "84": 334013,
+        "75": 329624,
+        "44": 281028,
+        "11": 241720,
+        "27": 226196,
+        "93": 181000,
+        "24": 179137,
+        "32": 158680,
+        "52": 156314
+      },
+      "dept": {
+        "999": 498857,
+        "59": 27011,
+        "75": 26921,
+        "13": 26873,
+        "93": 26860,
+        "69": 26844,
+        "94": 26757,
+        "92": 26714,
+        "62": 26705,
+        "78": 26682
+      }
+    },
+    "min_values": {
+      "annee": "2015"
+    },
+    "max_values": {
+      "annee": "2020"
+    },
+    "numeric_sums": {
+      "annee": 6181066294.0,
+      "sexe": 12581561.0,
+      "region": 156600680.0,
+      "Ntop": 9300676670.0,
+      "Npop": 341231948780.0,
+      "prev": 11251925.628,
+      "tri": 120215611.0
+    }
+  },
+  {
+    "file_name": "speech_time_mw.csv",
+    "path": "../Documents/speech_time_mw.csv",
+    "size_bytes": 115432768,
+    "separator": ",",
+    "columns": [
+      "media_type",
+      "channel_code",
+      "channel_name",
+      "is_public_channel",
+      "date",
+      "week_day",
+      "school_holiday_zones",
+      "civil_holyday",
+      "hour",
+      "male_duration",
+      "female_duration",
+      "music_duration"
+    ],
+    "sample_rows": 100000,
+    "dtypes": {
+      "media_type": "object",
+      "channel_code": "object",
+      "channel_name": "object",
+      "is_public_channel": "bool",
+      "date": "object",
+      "week_day": "object",
+      "school_holiday_zones": "object",
+      "civil_holyday": "bool",
+      "hour": "int64",
+      "male_duration": "float64",
+      "female_duration": "float64",
+      "music_duration": "float64"
+    },
+    "sample_nulls": {
+      "media_type": 0,
+      "channel_code": 0,
+      "channel_name": 0,
+      "is_public_channel": 0,
+      "date": 0,
+      "week_day": 0,
+      "school_holiday_zones": 58998,
+      "civil_holyday": 0,
+      "hour": 0,
+      "male_duration": 0,
+      "female_duration": 0,
+      "music_duration": 0
+    },
+    "sample_unique_counts": {
+      "media_type": 1,
+      "channel_code": 4,
+      "channel_name": 4,
+      "is_public_channel": 2,
+      "date": 7893,
+      "week_day": 7,
+      "school_holiday_zones": 7,
+      "civil_holyday": 2,
+      "hour": 19,
+      "male_duration": 97983,
+      "female_duration": 96611,
+      "music_duration": 96242
+    },
+    "top_values": {
+      "media_type": {
+        "radio": 100000
+      },
+      "channel_code": {
+        "FBL": 32035,
+        "EU1": 31695,
+        "CHE": 29631,
+        "FCR": 6639
+      },
+      "channel_name": {
+        "France Bleu": 32035,
+        "Europe 1": 31695,
+        "Chérie FM": 29631,
+        "France Culture": 6639
+      },
+      "is_public_channel": {
+        "False": 61326,
+        "True": 38674
+      },
+      "date": {
+        "2019-02-08": 57,
+        "2019-01-27": 57,
+        "2019-01-13": 57,
+        "2019-01-14": 57,
+        "2019-02-16": 57,
+        "2019-01-29": 57,
+        "2019-02-27": 57,
+        "2019-01-15": 57
+      },
+      "week_day": {
+        "Thursday": 14410,
+        "Tuesday": 14392,
+        "Monday": 14362,
+        "Wednesday": 14346,
+        "Friday": 14342,
+        "Saturday": 14156,
+        "Sunday": 13992
+      },
+      "school_holiday_zones": {
+        "ABC": 25427,
+        "B": 3009,
+        "AC": 2854,
+        "AB": 2579,
+        "A": 2490,
+        "BC": 2471,
+        "C": 2172
+      },
+      "civil_holyday": {
+        "False": 97061,
+        "True": 2939
+      },
+      "hour": {
+        "12": 5370,
+        "15": 5367,
+        "7": 5334,
+        "8": 5332,
+        "17": 5317,
+        "6": 5309,
+        "11": 5304,
+        "5": 5301
+      }
+    },
+    "numeric_summary": {
+      "hour": {
+        "count": 100000.0,
+        "mean": 13.9463,
+        "std": 5.4561,
+        "min": 5.0,
+        "25%": 9.0,
+        "50%": 14.0,
+        "75%": 19.0,
+        "max": 23.0
+      },
+      "male_duration": {
+        "count": 100000.0,
+        "mean": 1256.8854,
+        "std": 1031.5722,
+        "min": 0.0,
+        "25%": 309.94,
+        "50%": 978.99,
+        "75%": 2194.38,
+        "max": 3599.92
+      },
+      "female_duration": {
+        "count": 100000.0,
+        "mean": 618.5284,
+        "std": 532.1745,
+        "min": 0.0,
+        "25%": 228.48,
+        "50%": 457.57,
+        "75%": 887.99,
+        "max": 3494.76
+      },
+      "music_duration": {
+        "count": 100000.0,
+        "mean": 1686.8845,
+        "std": 1263.8372,
+        "min": 0.0,
+        "25%": 324.85,
+        "50%": 1722.67,
+        "75%": 2958.865,
+        "max": 3599.94
+      }
+    },
+    "row_count": 1078801,
+    "domain": "Media / gender representation",
+    "business_summary": "Radio and TV speaking-time and music-duration observations by channel, date, and hour.",
+    "homepedia_fit": "Not useful for the HOMEPEDIA real-estate MVP.",
+    "recommended_use": "Keep as an external big-data practice dataset for time-series and equality dashboards.",
+    "null_counts": {
+      "media_type": 0,
+      "channel_code": 0,
+      "channel_name": 0,
+      "is_public_channel": 0,
+      "date": 0,
+      "week_day": 0,
+      "school_holiday_zones": 636008,
+      "civil_holyday": 0,
+      "hour": 0,
+      "male_duration": 0,
+      "female_duration": 0,
+      "music_duration": 0
+    },
+    "global_top_values": {
+      "media_type": {
+        "radio": 636822,
+        "tv": 441979
+      },
+      "channel_name": {
+        "France Culture": 47206,
+        "France Musique": 46526,
+        "France Inter": 44438,
+        "France Info": 44259,
+        "RFI": 33192,
+        "France Bleu": 32035,
+        "RMC": 31763,
+        "RTL": 31760,
+        "Europe 1": 31695,
+        "Skyrock": 30634
+      }
+    },
+    "min_values": {
+      "hour": "5",
+      "date": "1995-01-01 00:00:00"
+    },
+    "max_values": {
+      "hour": "23",
+      "date": "2019-02-28 00:00:00"
+    },
+    "numeric_sums": {
+      "hour": 16183973.0,
+      "male_duration": 1718359664.52,
+      "female_duration": 697400455.18,
+      "music_duration": 1379073405.62
+    }
+  }
+]

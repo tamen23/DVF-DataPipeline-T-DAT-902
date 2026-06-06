@@ -11,7 +11,8 @@ data_lake/gold/*
 !data_lake/bronze/.gitkeep
 !data_lake/silver/.gitkeep
 !data_lake/gold/.gitkeep
+!data_lake/gold/external_catalog/
+!data_lake/gold/external_catalog/*.json
 *.parquet
 *.duckdb
 logs/
-

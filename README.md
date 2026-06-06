@@ -100,6 +100,19 @@ Start the Streamlit prototype:
 streamlit run dashboard/streamlit/app.py
 ```
 
+Profile the CSV files provided in `Documents`:
+
+```bash
+python -m data_pipeline.profiling.profile_documents --documents-dir ../Documents
+```
+
+This generates:
+
+- `docs/documents_csv_analysis.md`
+- `data_lake/gold/external_catalog/documents_csv_profiles.json`
+
+The Streamlit prototype exposes this catalog in the `Documents CSV catalog` page.
+
 ## Data Lake Layers
 
 - `raw`: original files, unchanged
@@ -119,4 +132,4 @@ streamlit run dashboard/streamlit/app.py
 - FastAPI skeleton
 - Streamlit prototype
 - BI documentation
-
+- external CSV profiling for the datasets supplied in `Documents`
