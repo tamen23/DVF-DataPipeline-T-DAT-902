@@ -48,17 +48,6 @@ uvicorn backend.app.main:app --reload
 streamlit run dashboard/streamlit/app.py
 ```
 
-## Documents CSV Profiling
-
-```bash
-python -m data_pipeline.profiling.profile_documents --documents-dir ../Documents
-```
-
-Outputs:
-
-- `docs/documents_csv_analysis.md`
-- `data_lake/gold/external_catalog/documents_csv_profiles.json`
-
 ## DBT
 
 ```bash
