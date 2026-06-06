@@ -1,0 +1,12 @@
+version: 2
+
+sources:
+  - name: public
+    schema: public
+    tables:
+      - name: real_estate_transactions
+      - name: communes
+      - name: network_coverage
+      - name: transport_access
+      - name: socio_economic_indicators
+

@@ -1,0 +1,14 @@
+date_mutation,valeur_fonciere,surface_reelle_bati,nombre_pieces_principales,type_local,code_commune,commune,code_postal
+2022-01-14,245000,62,3,Appartement,75056,Paris,75011
+2022-02-18,310000,78,4,Appartement,75056,Paris,75015
+2022-03-21,185000,54,2,Appartement,69123,Lyon,69007
+2022-05-02,235000,70,3,Appartement,69123,Lyon,69003
+2022-06-11,155000,66,3,Appartement,31555,Toulouse,31000
+2022-07-19,280000,95,4,Maison,31555,Toulouse,31200
+2022-08-05,140000,58,3,Appartement,44109,Nantes,44000
+2022-09-27,205000,83,4,Maison,44109,Nantes,44300
+2022-10-09,125000,50,2,Appartement,33063,Bordeaux,33000
+2022-11-15,260000,90,4,Maison,33063,Bordeaux,33200
+2022-12-03,98000,45,2,Appartement,13055,Marseille,13001
+2022-12-21,195000,82,4,Maison,13055,Marseille,13008
+

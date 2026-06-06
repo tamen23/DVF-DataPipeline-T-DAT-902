@@ -1,0 +1,13 @@
+homepedia:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: localhost
+      user: homepedia
+      password: homepedia
+      port: 5432
+      dbname: homepedia
+      schema: public
+      threads: 4
+

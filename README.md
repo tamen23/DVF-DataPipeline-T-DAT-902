@@ -1,129 +1,122 @@
-```markdown
 # HOMEPEDIA
 
-## Présentation
+HOMEPEDIA is a Data Engineering and BI project for French housing and territorial decision-making.
 
-HOMEPEDIA est une plateforme Big Data d'analyse territoriale et immobilière permettant d'identifier les villes les plus attractives en France selon plusieurs critères : prix de l'immobilier, accessibilité aux transports, couverture réseau mobile et indicateurs socio-économiques.
+Main question:
 
-L'objectif est d'aider les particuliers, familles, étudiants et investisseurs à prendre des décisions éclairées concernant leur lieu de résidence ou leurs investissements immobiliers.
+> Where should someone live or invest in France according to the best compromise between housing prices, accessibility, mobile network, quality of life, and territorial indicators?
 
----
+## MVP Scope
 
-## Problématique
+Version 1 focuses on:
 
-Aujourd'hui, les données permettant d'évaluer l'attractivité d'un territoire sont dispersées entre de nombreuses sources :
+- DVF real estate transactions
+- French regions, departments, and communes
+- average price and price per square meter
+- annual evolution
+- commune ranking
+- BI-ready gold tables
+- Power BI model support
+- optional Streamlit prototype
 
-- Immobilier (DVF)
-- INSEE
-- DataGouv
-- Données géographiques
-- Réseaux mobiles (4G/5G)
-- Transports
-- Indicateurs socio-économiques
+Version 2 adds mobile network, transport, and global scoring. Version 3 adds scraping, NLP, AI, and cloud deployment.
 
-HOMEPEDIA centralise, nettoie, analyse et visualise ces données afin de répondre à une question simple :
+## Architecture
 
-> **Où habiter ou investir en France selon le meilleur compromis entre coût, accessibilité et qualité de vie ?**
-
----
-
-## Fonctionnalités principales
-
-### Analyse immobilière
-- Prix moyen des biens
-- Prix moyen au m²
-- Nombre de transactions
-- Évolution des prix
-
-### Analyse territoriale
-- Population
-- Densité
-- Revenu médian
-- Comparaison entre communes
-
-### Analyse de l'accessibilité
-- Couverture 4G / 5G
-- Accessibilité aux transports
-- Comparaison des territoires
-
-### Visualisation
-- Dashboard interactif
-- Cartographie dynamique
-- Classement des villes
-- Comparaison multi-critères
-
----
-
-## Architecture technique
-
-### Data Engineering
-- Python
-- Pandas
-- PySpark
-- DBT
-- Apache Airflow
-
-### Stockage
-- PostgreSQL
-- PostGIS
-- Data Lake (Raw / Bronze / Silver / Gold)
-
-### Visualisation
-- Power BI
-- Streamlit
-- Plotly
-
-### Infrastructure
-- Docker
-- Docker Compose
-
----
-
-## Sources de données
-
-- DVF (Demandes de Valeurs Foncières)
-- INSEE
-- DataGouv
-- Données géographiques françaises
-- Données réseaux mobiles
-- Données transports
-
----
-
-## Objectifs du projet
-
-### Version 1 (MVP)
-- Intégration des données DVF
-- Calcul des indicateurs immobiliers
-- Cartographie des prix
-- Dashboard Power BI
-- Classement des communes
-
-### Version 2
-- Intégration des données réseau mobile
-- Intégration des données transports
-- Score d'attractivité territorial
-
-### Version 3
-- Analyse de texte
-- IA et prédictions
-- Déploiement cloud
-
----
-
-## Équipe
-
-| Membre | Rôle |
-|----------|----------|
-| Yanis | Product Owner & Architecture |
-| Bilal | Data Ingestion & Data Quality |
-| Lys | PySpark & Transformations |
-| Paternus | PostgreSQL & Orchestration |
-| Marie | Power BI & Visualisation |
-
----
-
-## Résultat attendu
-
-Une plateforme décisionnelle capable de transformer des millions de lignes de données en indicateurs clairs, visualisations interactives et recommandations territoriales permettant d'identifier les meilleures zones où vivre ou investir en France.
+```text
+homepedia/
+├── data_lake/
+│   ├── raw/
+│   ├── bronze/
+│   ├── silver/
+│   └── gold/
+├── data_pipeline/
+│   ├── ingestion/
+│   ├── cleaning/
+│   ├── transformation/
+│   ├── spark_jobs/
+│   └── quality_checks/
+├── dbt/
+├── airflow/
+├── database/
+├── backend/
+├── dashboard/
+└── docs/
 ```
+
+## Quick Start
+
+Create the environment:
+
+```bash
+cd homepedia
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+Copy the environment file:
+
+```bash
+cp .env.example .env
+```
+
+Run the local pipeline with a local DVF CSV:
+
+```bash
+python -m data_pipeline.ingestion.ingest_dvf --input ../path/to/dvf.csv --year 2022
+python -m data_pipeline.transformation.bronze_dvf --year 2022
+python -m data_pipeline.cleaning.silver_dvf --year 2022
+python -m data_pipeline.transformation.gold_real_estate --year 2022
+```
+
+Run quality checks:
+
+```bash
+python -m data_pipeline.quality_checks.check_gold --year 2022
+```
+
+Start PostgreSQL:
+
+```bash
+docker compose up -d postgres
+```
+
+Load the schema:
+
+```bash
+psql "$DATABASE_URL" -f database/schema.sql
+```
+
+Start the API:
+
+```bash
+uvicorn backend.app.main:app --reload
+```
+
+Start the Streamlit prototype:
+
+```bash
+streamlit run dashboard/streamlit/app.py
+```
+
+## Data Lake Layers
+
+- `raw`: original files, unchanged
+- `bronze`: standardized columns, typed files, Parquet
+- `silver`: cleaned and normalized business entities
+- `gold`: BI-ready marts and KPI tables
+
+## Current Deliverables
+
+- technical architecture
+- SQL schema
+- DVF ingestion
+- bronze, silver, and gold transformations
+- PySpark aggregation job
+- Airflow DAG
+- DBT model skeleton
+- FastAPI skeleton
+- Streamlit prototype
+- BI documentation
+

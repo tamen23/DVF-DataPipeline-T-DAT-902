@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+data_lake/raw/*
+data_lake/bronze/*
+data_lake/silver/*
+data_lake/gold/*
+!data_lake/raw/.gitkeep
+!data_lake/bronze/.gitkeep
+!data_lake/silver/.gitkeep
+!data_lake/gold/.gitkeep
+*.parquet
+*.duckdb
+logs/
+

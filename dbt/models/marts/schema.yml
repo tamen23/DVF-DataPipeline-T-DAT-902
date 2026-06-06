@@ -1,0 +1,16 @@
+version: 2
+
+models:
+  - name: mart_commune_real_estate
+    description: BI-ready real estate KPIs by commune and year.
+    columns:
+      - name: code_commune
+        tests:
+          - not_null
+      - name: year
+        tests:
+          - not_null
+      - name: avg_price_m2
+        tests:
+          - not_null
+
