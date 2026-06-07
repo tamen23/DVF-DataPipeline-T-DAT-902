@@ -28,7 +28,29 @@
 
 ## Global Score
 
-Default formula:
+The generated first version uses persona-specific scores. Each persona applies different weights to commune indicators.
+
+Example:
+
+```text
+student_score =
+  30% affordability_score
++ 25% transport_score
++ 25% education_score
++ 10% services_score
++ 10% network_score
+```
+
+Investment scoring uses:
+
+```text
+investment_potential_score =
+  45% price_growth_score
++ 35% liquidity_score
++ 20% transport_score
+```
+
+Future default territorial formula:
 
 ```text
 global_score =
@@ -42,3 +64,14 @@ Weights are configured in `config/score_weights.yml`.
 
 For real estate, lower prices should produce a better affordability score. For investment-oriented scoring, the model can be inverted or combined with price evolution.
 
+## Generated Demo Indicators
+
+- `affordability_score`: inverse normalization of price per square meter.
+- `transport_score`: generated accessibility to public transport.
+- `network_score`: generated 4G/5G quality indicator.
+- `green_score`: generated green-space and environmental comfort score.
+- `services_score`: generated proximity to shops, daily services, and leisure.
+- `education_score`: generated school and university access score.
+- `health_score`: generated healthcare access score.
+- `liquidity_score`: normalized transaction count.
+- `price_growth_score`: normalized annual price growth.

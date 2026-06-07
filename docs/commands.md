@@ -20,6 +20,16 @@ python -m data_pipeline.transformation.gold_real_estate --year 2022
 python -m data_pipeline.quality_checks.check_gold --year 2022
 ```
 
+## Generated Demo App Data
+
+```bash
+python -m data_pipeline.generation.generate_demo_territories
+```
+
+Output:
+
+- `data_lake/gold/demo/territory_scores.parquet`
+
 ## Spark
 
 ```bash
@@ -45,7 +55,7 @@ uvicorn backend.app.main:app --reload
 ## Streamlit
 
 ```bash
-streamlit run dashboard/streamlit/app.py
+python -m streamlit run dashboard/streamlit/app.py
 ```
 
 ## DBT

@@ -6,6 +6,33 @@ Main question:
 
 > Where should someone live or invest in France according to the best compromise between housing prices, accessibility, mobile network, quality of life, and territorial indicators?
 
+## First App Version
+
+The current Streamlit app uses generated commune-level data to demonstrate the final HOMEPEDIA concept before the real datasets are fully connected.
+
+It includes:
+
+- persona selection: student, young worker, family, elderly person, investor
+- generated French communes
+- real-estate price per square meter
+- transport, mobile network, green spaces, services, education, health, and investment indicators
+- persona-based scoring
+- ranking table
+- map visualization
+- best-commune radar chart
+
+Generate the demo data:
+
+```bash
+python -m data_pipeline.generation.generate_demo_territories
+```
+
+Start the app:
+
+```bash
+python -m streamlit run dashboard/streamlit/app.py
+```
+
 ## MVP Scope
 
 Version 1 focuses on:
@@ -33,6 +60,7 @@ homepedia/
 ├── data_pipeline/
 │   ├── ingestion/
 │   ├── cleaning/
+│   ├── generation/
 │   ├── transformation/
 │   ├── spark_jobs/
 │   └── quality_checks/
@@ -97,7 +125,7 @@ uvicorn backend.app.main:app --reload
 Start the Streamlit prototype:
 
 ```bash
-streamlit run dashboard/streamlit/app.py
+python -m streamlit run dashboard/streamlit/app.py
 ```
 
 ## Data Lake Layers
@@ -118,4 +146,5 @@ streamlit run dashboard/streamlit/app.py
 - DBT model skeleton
 - FastAPI skeleton
 - Streamlit prototype
+- generated persona-based recommendation app
 - BI documentation
