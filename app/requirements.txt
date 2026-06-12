@@ -1,0 +1,10 @@
+streamlit
+plotly
+folium
+streamlit-folium
+pandas
+sqlalchemy
+psycopg2-binary
+pymongo
+minio
+requests
