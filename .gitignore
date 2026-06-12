@@ -1,0 +1,18 @@
+# secrets
+.env
+
+# python
+__pycache__/
+*.pyc
+.venv/
+
+# airflow
+orchestration/logs/
+
+# local data files (course samples, lake exports) — never in git
+data/
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
