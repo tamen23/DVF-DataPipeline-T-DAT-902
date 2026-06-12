@@ -77,3 +77,71 @@ def departments_list() -> pd.DataFrame:
     return pd.read_sql(
         "SELECT code, name FROM referential.department ORDER BY code", _engine()
     )
+
+
+@st.cache_data(ttl=600)
+def communes_for_search(min_population: int = 2000) -> pd.DataFrame:
+    """Communes selectable in the Compare page (kept light for the browser)."""
+    sql = text(
+        """
+        SELECT c.code_insee AS code, c.name, d.name AS department, c.population
+        FROM referential.commune c
+        JOIN referential.department d ON d.code = c.department_code
+        WHERE c.population >= :pop
+        ORDER BY c.population DESC
+        """
+    )
+    return pd.read_sql(sql, _engine(), params={"pop": min_population})
+
+
+@st.cache_data(ttl=600)
+def commune_profiles(codes: list[str]) -> pd.DataFrame:
+    """One row per commune: latest prices, rents, income, population."""
+    sql = text(
+        """
+        WITH latest AS (SELECT max(year) AS y FROM gold.dvf_commune_year)
+        SELECT c.code_insee AS code, c.name, d.name AS department, c.population,
+               app.median_price_m2  AS price_m2_apartment,
+               app.nb_sales         AS sales_apartment,
+               mai.median_price_m2  AS price_m2_house,
+               l.rent_m2_apartment, l.rent_m2_house,
+               f.median_income, f.poverty_rate,
+               (SELECT y FROM latest) AS dvf_year
+        FROM referential.commune c
+        JOIN referential.department d ON d.code = c.department_code
+        LEFT JOIN gold.dvf_commune_year app
+               ON app.code_commune = c.code_insee
+              AND app.type_local = 'Appartement' AND app.year = (SELECT y FROM latest)
+        LEFT JOIN gold.dvf_commune_year mai
+               ON mai.code_commune = c.code_insee
+              AND mai.type_local = 'Maison' AND mai.year = (SELECT y FROM latest)
+        LEFT JOIN gold.loyers_commune l    ON l.code_insee = c.code_insee
+        LEFT JOIN gold.filosofi_commune f  ON f.code_insee = c.code_insee
+        WHERE c.code_insee = ANY(:codes)
+        """
+    )
+    return pd.read_sql(sql, _engine(), params={"codes": codes})
+
+
+_EVOLUTION_TABLES = {
+    "Region": ("gold.dvf_region_year", "region_code"),
+    "Department": ("gold.dvf_department_year", "code_departement"),
+    "Commune": ("gold.dvf_commune_year", "code_commune"),
+}
+
+
+@st.cache_data(ttl=600)
+def price_evolution(level: str, codes: list[str], type_local: str) -> pd.DataFrame:
+    """Median €/m² per year for the given areas (one line per area)."""
+    table, code_col = _EVOLUTION_TABLES[level]
+    sql = text(
+        f"""
+        SELECT {code_col} AS code, year, median_price_m2, nb_sales
+        FROM {table}
+        WHERE {code_col} = ANY(:codes) AND type_local = :type_local
+        ORDER BY year
+        """
+    )
+    return pd.read_sql(
+        sql, _engine(), params={"codes": codes, "type_local": type_local}
+    )

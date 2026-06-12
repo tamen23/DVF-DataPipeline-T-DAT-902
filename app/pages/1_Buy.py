@@ -121,3 +121,31 @@ with right:
         height=520,
         use_container_width=True,
     )
+
+# ---------------------------------------------------------------- evolution
+st.subheader("Price evolution")
+if len(years) < 2:
+    st.info("Evolution needs several years of data — set DVF_YEARS and re-run the pipeline.")
+else:
+    import plotly.express as px
+
+    top_default = (
+        df.sort_values("nb_sales", ascending=False)["name"].head(5).tolist()
+    )
+    selected = st.multiselect(
+        "Areas to compare", df["name"].sort_values().tolist(), default=top_default
+    )
+    if selected:
+        codes = df[df["name"].isin(selected)]["code"].tolist()
+        evo = db.price_evolution(level, codes, type_local)
+        evo = evo.merge(df[["code", "name"]], on="code")
+        fig = px.line(
+            evo,
+            x="year",
+            y="median_price_m2",
+            color="name",
+            markers=True,
+            labels={"median_price_m2": "€/m² (median)", "year": "", "name": ""},
+        )
+        fig.update_layout(height=380, margin=dict(t=20, b=20))
+        st.plotly_chart(fig, use_container_width=True)
