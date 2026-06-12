@@ -1,5 +1,6 @@
 # secrets
 .env
+LOCAL_ACCESS.md
 
 # python
 __pycache__/
