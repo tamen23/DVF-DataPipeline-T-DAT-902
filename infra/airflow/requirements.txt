@@ -1,0 +1,13 @@
+# spark-submit from Airflow (SparkSubmitOperator)
+# versions resolved by the Airflow constraints file (see Dockerfile)
+apache-airflow-providers-apache-spark
+pyspark
+
+# lake access from ingestion tasks
+minio
+boto3
+requests
+
+# NOTE: dbt and great-expectations deliberately NOT installed here —
+# they run in their own lightweight container to avoid dependency
+# conflicts with Airflow (added when warehouse/quality work starts).
