@@ -9,7 +9,9 @@ from data_pipeline.settings import file_path
 
 
 def build_bronze_dvf(year: int, chunksize: int = 100_000) -> None:
-    raw_path = file_path("raw", "dvf", str(year), f"dvf_{year}.csv")
+    gz_path = file_path("raw", "dvf", str(year), f"dvf_{year}.csv.gz")
+    csv_path = file_path("raw", "dvf", str(year), f"dvf_{year}.csv")
+    raw_path = gz_path if gz_path.exists() else csv_path
     bronze_path = file_path("bronze", "dvf", str(year), f"dvf_{year}.parquet")
 
     chunks = []
@@ -23,6 +25,8 @@ def build_bronze_dvf(year: int, chunksize: int = 100_000) -> None:
         raise ValueError(f"No rows found in {raw_path}")
 
     bronze = pd.concat(chunks, ignore_index=True)
+    for col in bronze.select_dtypes(include=["object", "str"]).columns:
+        bronze[col] = bronze[col].astype(str)
     bronze.to_parquet(bronze_path, index=False)
     print(f"Bronze DVF written to {bronze_path} ({len(bronze):,} rows)")
 

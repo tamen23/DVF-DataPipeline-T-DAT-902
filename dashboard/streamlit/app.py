@@ -9,7 +9,9 @@ import streamlit as st
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEMO_PATH = PROJECT_ROOT / "data_lake" / "gold" / "demo" / "territory_scores.parquet"
+DATA_LAKE = PROJECT_ROOT / "data_lake" / "gold"
+REAL_PATH = DATA_LAKE / "territories" / "territory_scores.parquet"
+DEMO_PATH = DATA_LAKE / "demo" / "territory_scores.parquet"
 
 PERSONAS = {
     "Etudiant": "score_etudiant",
@@ -33,13 +35,27 @@ CRITERIA_COLUMNS = {
 
 @st.cache_data
 def load_data() -> pd.DataFrame:
-    if not DEMO_PATH.exists():
-        st.error(
-            "Generated demo data is missing. Run: "
-            "`python -m data_pipeline.generation.generate_demo_territories`"
+    if REAL_PATH.exists():
+        return pd.read_parquet(REAL_PATH)
+    if DEMO_PATH.exists():
+        st.warning(
+            "Using demo data. To load real data run the full pipeline:\n\n"
+            "```\n"
+            "python -m data_pipeline.ingestion.ingest_dvf --year 2023\n"
+            "python -m data_pipeline.transformation.bronze_dvf --year 2023\n"
+            "python -m data_pipeline.cleaning.silver_dvf --year 2023\n"
+            "python -m data_pipeline.transformation.gold_real_estate --year 2023\n"
+            "python -m data_pipeline.ingestion.ingest_communes\n"
+            "python -m data_pipeline.ingestion.ingest_arcep\n"
+            "python -m data_pipeline.transformation.build_territory_gold --year 2023\n"
+            "```"
         )
-        st.stop()
-    return pd.read_parquet(DEMO_PATH)
+        return pd.read_parquet(DEMO_PATH)
+    st.error(
+        "No data found. Run the pipeline to generate real data or the demo:\n\n"
+        "`python -m data_pipeline.generation.generate_demo_territories`"
+    )
+    st.stop()
 
 
 def format_price(value: float) -> str:

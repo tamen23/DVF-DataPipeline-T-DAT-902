@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-from fastapi import Depends, FastAPI
-from sqlalchemy import text
-from sqlalchemy.orm import Session
+from fastapi import FastAPI, HTTPException, Query
 
-from backend.app.database import get_db
+from backend.app.database import execute_query
 
-
-app = FastAPI(title="HOMEPEDIA API", version="0.1.0")
+app = FastAPI(title="HOMEPEDIA API", version="0.2.0")
 
 
 @app.get("/health")
@@ -16,118 +13,116 @@ def health() -> dict[str, str]:
 
 
 @app.get("/regions")
-def regions(db: Session = Depends(get_db)):
-    return db.execute(text("SELECT id, code_region, nom_region FROM regions ORDER BY nom_region")).mappings().all()
+def regions():
+    return execute_query("SELECT code_region, nom_region FROM regions ORDER BY nom_region")
 
 
 @app.get("/departements")
-def departements(region_id: int | None = None, db: Session = Depends(get_db)):
-    query = "SELECT id, code_departement, nom_departement, region_id FROM departements"
-    params = {}
-    if region_id is not None:
-        query += " WHERE region_id = :region_id"
-        params["region_id"] = region_id
-    query += " ORDER BY code_departement"
-    return db.execute(text(query), params).mappings().all()
+def departements(code_region: str | None = None):
+    if code_region:
+        return execute_query(
+            "SELECT code_departement, nom_departement, code_region FROM departements WHERE code_region = '{}' ORDER BY code_departement".format(code_region)
+        )
+    return execute_query("SELECT code_departement, nom_departement, code_region FROM departements ORDER BY code_departement")
 
 
 @app.get("/communes")
-def communes(departement_id: int | None = None, db: Session = Depends(get_db)):
-    query = "SELECT id, code_commune, nom_commune, population FROM communes"
-    params = {}
-    if departement_id is not None:
-        query += " WHERE departement_id = :departement_id"
-        params["departement_id"] = departement_id
-    query += " ORDER BY nom_commune LIMIT 500"
-    return db.execute(text(query), params).mappings().all()
-
-
-@app.get("/stats/real-estate")
-def real_estate_stats(commune_id: int, year: int | None = None, db: Session = Depends(get_db)):
-    query = """
-        SELECT
-            commune_id,
-            EXTRACT(YEAR FROM date_mutation)::INTEGER AS year,
-            COUNT(*) AS transaction_count,
-            AVG(valeur_fonciere)::NUMERIC(14, 2) AS avg_price,
-            AVG(prix_m2)::NUMERIC(14, 2) AS avg_price_m2
-        FROM real_estate_transactions
-        WHERE commune_id = :commune_id
-    """
-    params = {"commune_id": commune_id}
-    if year is not None:
-        query += " AND EXTRACT(YEAR FROM date_mutation)::INTEGER = :year"
-        params["year"] = year
-    query += " GROUP BY commune_id, EXTRACT(YEAR FROM date_mutation) ORDER BY year"
-    return db.execute(text(query), params).mappings().all()
-
-
-@app.get("/stats/network")
-def network_stats(commune_id: int, db: Session = Depends(get_db)):
-    query = """
-        SELECT operator, coverage_4g_score, coverage_5g_score, source
-        FROM network_coverage
-        WHERE commune_id = :commune_id
-        ORDER BY operator
-    """
-    return db.execute(text(query), {"commune_id": commune_id}).mappings().all()
-
-
-@app.get("/stats/transport")
-def transport_stats(commune_id: int, db: Session = Depends(get_db)):
-    query = """
-        SELECT transport_score, nearest_station_distance, source
-        FROM transport_access
-        WHERE commune_id = :commune_id
-        ORDER BY id DESC
-        LIMIT 1
-    """
-    return db.execute(text(query), {"commune_id": commune_id}).mappings().all()
+def communes(code_departement: str | None = None, limit: int = Query(default=500, le=5000)):
+    if code_departement:
+        return execute_query(
+            "SELECT code_commune, nom_commune, latitude, longitude, population FROM communes WHERE code_departement = '{}' ORDER BY nom_commune LIMIT {}".format(code_departement, limit)
+        )
+    return execute_query(f"SELECT code_commune, nom_commune, latitude, longitude, population FROM communes ORDER BY nom_commune LIMIT {limit}")
 
 
 @app.get("/scores")
-def scores(commune_id: int, year: int | None = None, db: Session = Depends(get_db)):
-    query = "SELECT * FROM territorial_scores WHERE commune_id = :commune_id"
-    params = {"commune_id": commune_id}
-    if year is not None:
-        query += " AND year = :year"
-        params["year"] = year
-    return db.execute(text(query), params).mappings().all()
+def scores(code_commune: str | None = None, region: str | None = None, limit: int = Query(default=100, le=5000)):
+    where_clauses = []
+    if code_commune:
+        where_clauses.append(f"code_commune = '{code_commune}'")
+    if region:
+        where_clauses.append(f"region = '{region}'")
+    where = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+    return execute_query(f"SELECT * FROM gold_territory_scores {where} ORDER BY score_etudiant DESC LIMIT {limit}")
 
 
 @app.get("/ranking")
-def ranking(year: int, limit: int = 50, db: Session = Depends(get_db)):
-    query = """
-        SELECT c.code_commune, c.nom_commune, s.year, s.global_score
-        FROM territorial_scores s
-        JOIN communes c ON c.id = s.commune_id
-        WHERE s.year = :year
-        ORDER BY s.global_score DESC
-        LIMIT :limit
-    """
-    return db.execute(text(query), {"year": year, "limit": limit}).mappings().all()
+def ranking(
+    persona: str = Query(default="etudiant", description="etudiant | jeune_actif | famille | personne_agee | investisseur"),
+    region: str | None = None,
+    max_price_m2: float | None = None,
+    limit: int = Query(default=50, le=500),
+):
+    score_col = f"score_{persona}"
+    valid_personas = ["etudiant", "jeune_actif", "famille", "personne_agee", "investisseur"]
+    if persona not in valid_personas:
+        raise HTTPException(status_code=400, detail=f"Invalid persona. Choose from: {valid_personas}")
+
+    where_clauses = []
+    if region:
+        where_clauses.append(f"region = '{region}'")
+    if max_price_m2:
+        where_clauses.append(f"avg_price_m2 <= {max_price_m2}")
+    where = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+
+    return execute_query(
+        f"""
+        SELECT code_commune, nom_commune, region, avg_price_m2,
+               {score_col} AS persona_score,
+               transport_score, network_score, green_score,
+               education_score, health_score, affordability_score
+        FROM gold_territory_scores
+        {where}
+        ORDER BY {score_col} DESC
+        LIMIT {limit}
+        """
+    )
+
+
+@app.get("/commune/{code_commune}")
+def commune_detail(code_commune: str):
+    results = execute_query(
+        f"SELECT * FROM vw_commune_full WHERE code_commune = '{code_commune}' LIMIT 1"
+    )
+    if not results:
+        raise HTTPException(status_code=404, detail="Commune not found")
+    return results[0]
 
 
 @app.get("/compare")
-def compare(commune_id_1: int, commune_id_2: int, year: int | None = None, db: Session = Depends(get_db)):
-    query = """
-        SELECT
-            c.id AS commune_id,
-            c.code_commune,
-            c.nom_commune,
-            s.year,
-            s.real_estate_score,
-            s.network_score,
-            s.transport_score,
-            s.socio_economic_score,
-            s.global_score
-        FROM communes c
-        LEFT JOIN territorial_scores s ON s.commune_id = c.id
-        WHERE c.id IN (:commune_id_1, :commune_id_2)
-    """
-    params = {"commune_id_1": commune_id_1, "commune_id_2": commune_id_2}
-    if year is not None:
-        query += " AND s.year = :year"
-        params["year"] = year
-    query += " ORDER BY c.nom_commune"
-    return db.execute(text(query), params).mappings().all()
+def compare(codes: str = Query(description="Comma-separated commune codes, e.g. 75056,69123")):
+    code_list = [c.strip() for c in codes.split(",")]
+    codes_str = ", ".join(f"'{c}'" for c in code_list)
+    return execute_query(
+        f"""
+        SELECT code_commune, nom_commune, region, avg_price_m2,
+               affordability_score, transport_score, network_score,
+               green_score, education_score, health_score,
+               score_etudiant, score_jeune_actif, score_famille,
+               score_personne_agee, score_investisseur
+        FROM gold_territory_scores
+        WHERE code_commune IN ({codes_str})
+        ORDER BY nom_commune
+        """
+    )
+
+
+@app.get("/stats/real-estate")
+def real_estate_stats(code_commune: str, year: int | None = None):
+    where = f"WHERE code_commune = '{code_commune}'"
+    if year:
+        where += f" AND year = {year}"
+    return execute_query(
+        f"SELECT * FROM gold_real_estate {where} ORDER BY year DESC"
+    )
+
+
+@app.get("/listings")
+def listings(code_commune: str | None = None, source: str | None = None):
+    where_clauses = []
+    if code_commune:
+        where_clauses.append(f"code_commune = '{code_commune}'")
+    if source:
+        where_clauses.append(f"source_name = '{source}'")
+    where = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+    return execute_query(f"SELECT * FROM silver_listings {where} ORDER BY avg_listing_price_m2 DESC LIMIT 100")
