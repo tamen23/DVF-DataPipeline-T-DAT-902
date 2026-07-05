@@ -18,6 +18,8 @@ services:
       dockerfile: deploy/Dockerfile.dashboard
     container_name: homepedia-dashboard
     restart: unless-stopped
+    environment:
+      HOMEPEDIA_GRAFANA_URL: "http://74.208.33.89:3002"
     ports:
       - "8501:8501"
     mem_limit: 900m

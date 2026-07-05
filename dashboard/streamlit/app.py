@@ -500,7 +500,7 @@ def simulate_20ans(
 # ══════════════════════════════════════════════════════════════════════════════
 # APP
 # ══════════════════════════════════════════════════════════════════════════════
-st.set_page_config(page_title="HOMEPEDIA — Investisseur", layout="wide", page_icon="🏦")
+st.set_page_config(page_title="HOMEPEDIA — Où investir en France ?", layout="wide", page_icon="🏦")
 
 data = normalize_data(load_data())
 
@@ -750,6 +750,11 @@ else:
     poids_qualite = 30
     # Poids égaux pour le score qualité en mode débutant
     w_transport = w_vert = w_commerces = w_mobile = w_education = w_sante = 1
+
+# ── Lien vers la BI Grafana (URL surchargée en déploiement) ───────────────────
+GRAFANA_URL = os.getenv("HOMEPEDIA_GRAFANA_URL", "http://localhost:3000")
+st.sidebar.markdown("---")
+st.sidebar.link_button("📊 Dashboards BI (Grafana)", GRAFANA_URL, use_container_width=True)
 
 # ── CALCUL CAPACITÉ D'EMPRUNT ─────────────────────────────────────────────────
 taux_base = taux_credit_manuel if taux_credit_manuel is not None else TAUX_MARCHE.get(duree, 3.65)
@@ -2319,3 +2324,13 @@ with tab_choro:
         fig_choro.update_layout(mapbox_style="open-street-map", margin=dict(l=0, r=0, t=0, b=0))
         st.plotly_chart(fig_choro, use_container_width=True, key="choropleth_depts")
         st.caption("Prix moyen au m² par département (choroplèthe) — moyenne des communes chargées.")
+
+# ── PIED DE PAGE : sources ─────────────────────────────────────────────────────
+st.divider()
+st.caption(
+    "**HOMEPEDIA** · Sources : DVF (data.gouv.fr), loyers ANIL 2024, couverture mobile ARCEP, "
+    "INSEE (BPE, Filosofi), équipements OpenStreetMap, transports GTFS (transport.data.gouv.fr), "
+    "taxe foncière DGFiP · Prédictions : RandomForest sur l'historique DVF · "
+    "Sentiment : analyse lexicale FR des annonces scrapées · "
+    "Les montants affichés sont des estimations, pas des conseils en investissement."
+)
