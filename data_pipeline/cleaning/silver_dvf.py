@@ -48,7 +48,9 @@ def build_silver_dvf(year: int) -> None:
     output = output[(output["prix_m2"] >= 100) & (output["prix_m2"] <= 50_000)]
     output = output.drop_duplicates()
 
-    output.to_parquet(silver_path, index=False)
+    # Timestamps en millisecondes : pandas/pyarrow écrit du TIMESTAMP(NANOS)
+    # par défaut, que Spark et Hive ne savent pas lire.
+    output.to_parquet(silver_path, index=False, coerce_timestamps="ms", allow_truncated_timestamps=True)
     print(f"Silver DVF written to {silver_path} ({len(output):,} rows)")
 
 

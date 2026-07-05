@@ -51,12 +51,32 @@ python -m data_pipeline.export.load_postgres --year 2023          # Postgres/Pos
 ## Spark
 
 ```bash
+# Nécessite Java 17 (winget install EclipseAdoptium.Temurin.17.JRE --source winget)
 python -m data_pipeline.spark_jobs.aggregate_dvf --year 2023
 ```
 
 Same output contract as the pandas gold builder (single Parquet file,
 same columns), so quality checks, HDFS upload and the Postgres load
-work unchanged.
+work unchanged. Windows quirks handled: hostname with underscore
+(SPARK_LOCAL_HOSTNAME forced to localhost) and no winutils needed
+(final write via pyarrow).
+
+## Analyse textuelle (NLP)
+
+```bash
+# Word cloud + sentiment FR par commune, à partir des textes d'annonces Kafka
+python -m data_pipeline.nlp.analyze_listings_text
+# -> gold/nlp/text_analysis.parquet, affiché dans le profil commune du dashboard
+```
+
+## MongoDB (base non-relationnelle)
+
+```bash
+docker compose up -d mongo
+# Le consumer Kafka bronze archive automatiquement le JSON brut des annonces
+# dans homepedia.listings_raw (désactivé proprement si Mongo est éteint).
+docker exec -it homepedia-mongo mongosh homepedia --eval "db.listings_raw.countDocuments()"
+```
 
 ## Kafka streaming (listings)
 

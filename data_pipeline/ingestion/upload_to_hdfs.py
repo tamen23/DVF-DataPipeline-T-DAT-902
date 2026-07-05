@@ -62,7 +62,7 @@ def hdfs_put(local: Path, hdfs_path: str) -> None:
 
     # Cleanup temp file
     _run(["docker", "exec", NAMENODE_CONTAINER, "rm", "-f", container_path], check=False)
-    print(f"  Uploaded {local.name} → hdfs:{hdfs_path}")
+    print(f"  Uploaded {local.name} -> hdfs:{hdfs_path}")
 
 
 def repair_partitions(tables: list[str]) -> None:

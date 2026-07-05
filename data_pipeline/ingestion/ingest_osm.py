@@ -165,7 +165,7 @@ def ingest_osm(departments: list[str] | None = None, resume: bool = True) -> Pat
         west  = dept_communes["longitude"].min() - 0.1
         east  = dept_communes["longitude"].max() + 0.1
 
-        print(f"  [{i}/{len(target_depts)}] Département {dept} (bbox {south:.2f},{west:.2f} → {north:.2f},{east:.2f})...", end=" ", flush=True)
+        print(f"  [{i}/{len(target_depts)}] Département {dept} (bbox {south:.2f},{west:.2f} -> {north:.2f},{east:.2f})...", end=" ", flush=True)
 
         try:
             pois = _query_dept_pois(south, west, north, east)
@@ -196,7 +196,7 @@ def ingest_osm(departments: list[str] | None = None, resume: bool = True) -> Pat
                     merged[col] = merged[col].fillna(0).astype(int)
 
                 all_frames.append(merged)
-                print(f"{len(pois):,} POIs → {len(merged)} communes")
+                print(f"{len(pois):,} POIs -> {len(merged)} communes")
 
         except Exception as e:
             print(f"ERREUR : {e}")
@@ -227,7 +227,7 @@ def ingest_osm(departments: list[str] | None = None, resume: bool = True) -> Pat
         encoding="utf-8",
     )
 
-    print(f"\nOSM POI counts : {len(result):,} communes → {target}")
+    print(f"\nOSM POI counts : {len(result):,} communes -> {target}")
     return target
 
 

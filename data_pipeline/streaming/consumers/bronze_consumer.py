@@ -29,6 +29,9 @@ from data_pipeline.settings import file_path
 from data_pipeline.streaming.kafka_config import (
     CONSUMER_GROUP,
     KAFKA_BOOTSTRAP_SERVERS,
+    MONGO_COLLECTION,
+    MONGO_DATABASE,
+    MONGO_URL,
     TOPICS,
 )
 
@@ -36,9 +39,36 @@ BATCH_SIZE = 500       # flush after this many messages
 BATCH_TIMEOUT = 60     # flush after this many seconds even if batch not full
 
 
-def _flush_batch(source: str, batch: list[dict]) -> None:
+def _mongo_collection():
+    """Optional NoSQL sink: raw listing JSON goes to MongoDB as well.
+
+    Returns None (with a warning) when pymongo is missing or the server
+    is unreachable — the Parquet bronze layer keeps working regardless.
+    """
+    try:
+        from pymongo import MongoClient
+        client = MongoClient(MONGO_URL, serverSelectionTimeoutMS=3000)
+        client.admin.command("ping")
+        collection = client[MONGO_DATABASE][MONGO_COLLECTION]
+        collection.create_index([("source", 1), ("listing_id", 1)])
+        print(f"MongoDB connecte : {MONGO_URL} -> {MONGO_DATABASE}.{MONGO_COLLECTION}")
+        return collection
+    except ImportError:
+        print("  [warn] pymongo non installé — archivage MongoDB désactivé (pip install pymongo)")
+    except Exception as exc:
+        print(f"  [warn] MongoDB injoignable ({exc}) — archivage MongoDB désactivé")
+    return None
+
+
+def _flush_batch(source: str, batch: list[dict], mongo=None) -> None:
     if not batch:
         return
+
+    if mongo is not None:
+        try:
+            mongo.insert_many([dict(listing) for listing in batch], ordered=False)
+        except Exception as exc:
+            print(f"  [warn] insertion MongoDB échouée : {exc}")
 
     frame = pd.DataFrame(batch)
     now = datetime.now(timezone.utc)
@@ -49,7 +79,7 @@ def _flush_batch(source: str, batch: list[dict]) -> None:
         "bronze", "listings", source, date_str, f"batch_{ts}.parquet"
     )
     frame.to_parquet(output, index=False)
-    print(f"  [{source}] Flushed {len(batch)} listings → {output}")
+    print(f"  [{source}] Flushed {len(batch)} listings -> {output}")
 
 
 def run_consumer(sources: list[str] | None = None, idle_timeout: int | None = None) -> None:
@@ -74,6 +104,7 @@ def run_consumer(sources: list[str] | None = None, idle_timeout: int | None = No
     buffers: dict[str, list[dict]] = defaultdict(list)
     last_flush = datetime.now(timezone.utc).timestamp()
     last_message = last_flush
+    mongo = _mongo_collection()
 
     try:
         # poll() instead of iterating the consumer: iteration stops after a
@@ -100,7 +131,7 @@ def run_consumer(sources: list[str] | None = None, idle_timeout: int | None = No
 
             if should_flush:
                 for src, batch in buffers.items():
-                    _flush_batch(src, batch)
+                    _flush_batch(src, batch, mongo)
                 buffers.clear()
                 last_flush = now
 
@@ -109,7 +140,7 @@ def run_consumer(sources: list[str] | None = None, idle_timeout: int | None = No
     finally:
         # Flush remaining messages
         for src, batch in buffers.items():
-            _flush_batch(src, batch)
+            _flush_batch(src, batch, mongo)
         consumer.close()
         print("Consumer stopped.")
 

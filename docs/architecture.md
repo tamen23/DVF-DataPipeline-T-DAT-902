@@ -35,6 +35,8 @@ Open data (CSV/API)          Scrapers (SeLoger, LeBonCoin, CDC Habitat)
 - **Streaming** (`data_pipeline/streaming/`): Kafka producers run the scrapers, the bronze consumer batches listings to Parquet; `silver_listings` aggregates them per commune (postal → INSEE translation included).
 - **Quality** (`data_pipeline/quality_checks/`): gate between gold and publication; systematic anomalies fail the run, isolated outliers warn.
 - **ML** (`data_pipeline/ml/`): price prediction per commune (RandomForest on the gold DVF history, temporal holdout validation) and similar-communes recommendation (k-NN on the territory score vectors); surfaced in the dashboard as "Prix estimé (IA)" and "Communes similaires".
+- **NLP** (`data_pipeline/nlp/`): textual analysis of the scraped listing texts — French lexicon sentiment per commune + word frequencies; surfaced in the dashboard as a sentiment metric and a word cloud.
+- **MongoDB** (docker-compose: mongo, :27017): the non-relational store — the Kafka bronze consumer archives raw listing JSON into `homepedia.listings_raw` alongside the Parquet lake.
 - **Hive/HDFS** (docker-compose: namenode, datanode, metastore, hive-server): external tables over the gold/silver Parquet, queried by the API.
 - **PostgreSQL/PostGIS** (docker-compose: postgres): `data_pipeline/export/load_postgres.py` loads reference tables, transactions and scores; `database/schema.sql` is applied automatically.
 - **dbt** (`dbt/`): staging → intermediate → marts over the Postgres tables (`cd dbt && dbt run`).

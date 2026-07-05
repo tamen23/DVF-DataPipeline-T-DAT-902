@@ -153,7 +153,7 @@ def ingest_bpe() -> Path:
     counts = counts[["code_commune"] + expected_cols]
     counts.to_parquet(output, index=False)
 
-    print(f"\n  BPE scores : {len(counts):,} communes → {output}")
+    print(f"\n  BPE scores : {len(counts):,} communes -> {output}")
     print(f"  Exemple :\n{counts.head(3).to_string(index=False)}")
 
     output.with_suffix(".metadata.txt").write_text(

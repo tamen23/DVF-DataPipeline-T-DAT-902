@@ -15,7 +15,6 @@ Usage:
 
 import argparse
 import os
-import shutil
 
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
@@ -32,6 +31,10 @@ def build_gold_real_estate(year: int) -> None:
     silver_path = file_path("silver", "dvf", str(year), f"real_estate_transactions_{year}.parquet")
     gold_path = file_path("gold", "real_estate", str(year), f"real_estate_commune_{year}.parquet")
     previous_path = file_path("gold", "real_estate", str(year - 1), f"real_estate_commune_{year - 1}.parquet")
+
+    # Les hostnames Windows avec underscore (ex: PC_LEO) sont invalides dans
+    # les URLs RPC de Spark — localhost suffit en mode local.
+    os.environ.setdefault("SPARK_LOCAL_HOSTNAME", "localhost")
 
     spark = (
         SparkSession.builder.appName("homepedia-dvf-aggregation")
@@ -72,18 +75,16 @@ def build_gold_real_estate(year: int) -> None:
     else:
         grouped = grouped.withColumn("price_m2_yoy_variation", F.lit(None).cast("double"))
 
-    # Downstream consumers expect one Parquet *file* at gold_path, not a
-    # Spark output directory: write to a temp dir and move the single part.
-    tmp_dir = gold_path.parent / f"_spark_gold_{year}"
-    grouped.coalesce(1).write.mode("overwrite").parquet(str(tmp_dir))
-    row_count = grouped.count()
+    # Tout le calcul (lecture, filtres, agrégats, jointure YoY) est fait par
+    # Spark ; le mart final par commune est petit (< 40k lignes), on le
+    # collecte pour l'écrire en un seul fichier Parquet via pyarrow — même
+    # contrat de sortie que le job pandas, et pas de dépendance winutils
+    # pour l'écriture Hadoop sous Windows.
+    result = grouped.toPandas()
     spark.stop()
 
-    part_file = next(tmp_dir.glob("part-*.parquet"))
-    gold_path.unlink(missing_ok=True)
-    shutil.move(str(part_file), str(gold_path))
-    shutil.rmtree(tmp_dir)
-    print(f"Gold real estate mart written to {gold_path} ({row_count:,} rows) [spark]")
+    result.to_parquet(gold_path, index=False)
+    print(f"Gold real estate mart written to {gold_path} ({len(result):,} rows) [spark]")
 
 
 def main() -> None:

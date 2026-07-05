@@ -181,5 +181,8 @@ http://localhost:3000  (admin / homepedia) — folder HOMEPEDIA
 - IA: prédiction de prix par commune (RandomForest sur l'historique DVF)
   et recommandation de communes similaires (k-NN sur les scores) — colonnes
   « Prix estimé (IA) » et « Communes similaires » dans le dashboard
+- analyse textuelle : sentiment FR + nuage de mots par commune calculés
+  sur les textes d'annonces scrapées (data_pipeline/nlp)
+- MongoDB : archivage non-relationnel du JSON brut des annonces Kafka
 - CI on GitHub Actions: syntax checks, compose validation, dbt parse,
   and a pipeline smoke test on the sample DVF file

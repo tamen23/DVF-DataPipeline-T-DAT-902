@@ -118,6 +118,20 @@ services:
       timeout: 5s
       retries: 5
 
+  # ── MongoDB (base non-relationnelle : annonces JSON brutes) ─────
+  mongo:
+    image: mongo:7
+    container_name: homepedia-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # ── Grafana (BI dashboards over PostgreSQL) ─────────────────────
   # Datasource + HOMEPEDIA dashboard auto-provisioned from ./grafana.
   # UI: http://localhost:3000 (admin / homepedia)
@@ -220,3 +234,4 @@ volumes:
   hive_metastore_data:
   postgres_data:
   grafana_data:
+  mongo_data:

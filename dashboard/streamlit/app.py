@@ -1897,3 +1897,42 @@ try:
         )
 except ImportError:
     st.caption("scikit-learn non installé — `pip install scikit-learn` pour activer les recommandations.")
+
+# ── ANALYSE TEXTUELLE (NLP) ────────────────────────────────────────────────────
+st.markdown(f"#### 💬 Analyse textuelle des annonces — {sim_commune}")
+_nlp_path = DATA_LAKE / "nlp" / "text_analysis.parquet"
+if not _nlp_path.exists():
+    st.caption(
+        "Pas d'analyse textuelle disponible — lancez le pipeline Kafka puis "
+        "`python -m data_pipeline.nlp.analyze_listings_text`."
+    )
+else:
+    _nlp = pd.read_parquet(_nlp_path)
+    _row = _nlp[_nlp["code_commune"].astype(str) == str(sim_row.get("code_commune", ""))]
+    if _row.empty:
+        st.caption("Aucun texte collecté pour cette commune (lancez les scrapers Kafka dessus).")
+    else:
+        _row = _row.iloc[0]
+        nlp_col1, nlp_col2 = st.columns([1, 2])
+        with nlp_col1:
+            _emoji = {"positif": "😊", "neutre": "😐", "négatif": "😟"}.get(_row["sentiment_label"], "😐")
+            st.metric(
+                "Sentiment des annonces",
+                f"{_emoji} {_row['sentiment_label'].capitalize()}",
+                delta=f"score {_row['sentiment_score']:+.2f}",
+                delta_color="off",
+                help="Score lexical français entre -1 et +1 calculé sur titres et descriptions "
+                     "(data_pipeline.nlp.analyze_listings_text).",
+            )
+            st.metric("Textes analysés", f"{int(_row['n_texts'])} annonces")
+        with nlp_col2:
+            try:
+                import json as _json
+                from wordcloud import WordCloud
+                _freq = _json.loads(_row["top_words"])
+                if _freq:
+                    _wc = WordCloud(width=640, height=280, background_color="white",
+                                    colormap="viridis").generate_from_frequencies(_freq)
+                    st.image(_wc.to_array(), use_container_width=True)
+            except ImportError:
+                st.caption("`pip install wordcloud` pour afficher le nuage de mots.")
