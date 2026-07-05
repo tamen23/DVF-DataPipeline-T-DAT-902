@@ -1,27 +1,26 @@
 # Roadmap
 
-## Version 1
+## Version 1 — done
 
 - DVF ingestion
 - commune reference data
 - price per square meter
-- gold marts
+- gold marts (Hive + PostgreSQL)
 - Power BI dashboard
-- simple Streamlit prototype
+- Streamlit prototype
 
-## Version 2
+## Version 2 — done
 
 - ARCEP mobile network data
-- transport data
-- socio-economic data
-- territorial score
+- transport data (GTFS, OSM)
+- socio-economic data (INSEE Filosofi, loyers, taxe foncière)
+- territorial and persona scores
 - comparison screen
+- Kafka scraping of live listings (SeLoger, LeBonCoin, CDC Habitat)
 
-## Version 3
+## Version 3 — remaining
 
-- scraping
 - NLP
 - sentiment analysis
 - prediction
-- cloud deployment
-
+- cloud deployment (the local stack mirrors an AWS/Azure lakehouse layout)

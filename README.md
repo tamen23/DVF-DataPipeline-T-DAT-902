@@ -58,17 +58,20 @@ homepedia/
 │   ├── silver/
 │   └── gold/
 ├── data_pipeline/
-│   ├── ingestion/
-│   ├── cleaning/
-│   ├── generation/
-│   ├── transformation/
-│   ├── spark_jobs/
+│   ├── ingestion/        # one script per source + HDFS upload
+│   ├── cleaning/         # silver transformations
+│   ├── generation/       # demo data generator
+│   ├── transformation/   # bronze/gold builders, silver listings
+│   ├── spark_jobs/       # PySpark gold aggregation (USE_SPARK=1)
+│   ├── streaming/        # Kafka producers, scrapers, bronze consumer
+│   ├── export/           # PostgreSQL/PostGIS loader
 │   └── quality_checks/
-├── dbt/
-├── airflow/
-├── database/
-├── backend/
-├── dashboard/
+├── dbt/                  # staging -> intermediate -> marts (Postgres)
+├── airflow/              # DAG run by the compose airflow service
+├── database/             # schema.sql (Postgres) + hive_schema.sql (Hive)
+├── hadoop/               # HDFS/Hive container config
+├── backend/              # FastAPI over Hive
+├── dashboard/            # Streamlit (API-first) + Power BI docs
 └── docs/
 ```
 
@@ -93,6 +96,12 @@ Start the infrastructure (HDFS, Hive, Postgres, Kafka, Airflow):
 
 ```bash
 docker compose up -d
+```
+
+Create the Hive tables (once, after hive-server is up):
+
+```bash
+docker exec -i homepedia-hive-server beeline -u jdbc:hive2://localhost:10000 -n hive -f /dev/stdin < database/hive_schema.sql
 ```
 
 Run the full pipeline (ingestion → gold → quality → HDFS → Postgres):
@@ -150,14 +159,14 @@ HOMEPEDIA_API_URL=http://localhost:8000 python -m streamlit run dashboard/stream
 
 ## Current Deliverables
 
-- technical architecture
-- SQL schema
-- DVF ingestion
-- bronze, silver, and gold transformations
-- PySpark aggregation job
-- Airflow DAG
-- DBT model skeleton
-- FastAPI skeleton
-- Streamlit prototype
-- generated persona-based recommendation app
-- BI documentation
+- technical architecture (docs/architecture.md — matches the code)
+- dual serving: Hive external tables (HDFS) and PostgreSQL/PostGIS
+- ingestion for DVF, communes, ARCEP, INSEE, OSM, GTFS, loyers, taxe foncière
+- bronze, silver, and gold transformations with a quality gate
+- Kafka streaming: scrapers → producers → bronze consumer → silver listings
+- PySpark gold aggregation, interchangeable with pandas (USE_SPARK=1)
+- Airflow DAG runnable from the compose airflow service
+- dbt models (staging → marts) running on the loaded Postgres
+- FastAPI over Hive (parameterized queries, /territories bulk endpoint)
+- Streamlit dashboard reading the API with local-parquet fallback
+- BI documentation (docs/powerbi_views.md)
