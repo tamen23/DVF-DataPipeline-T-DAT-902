@@ -16,6 +16,7 @@ This file is what the Streamlit app reads.
 import argparse
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from data_pipeline.settings import file_path
@@ -26,11 +27,11 @@ from data_pipeline.settings import file_path
 # -------------------------------------------------------------------
 
 def _normalize_0_100(series: pd.Series, inverse: bool = False) -> pd.Series:
-    lo, hi = series.min(), series.max()
-    if hi == lo:
-        return pd.Series([50.0] * len(series), index=series.index)
-    normalized = (series - lo) / (hi - lo) * 100
-    return (100 - normalized if inverse else normalized).round(2)
+    """Percentile rank normalization — 50% of communes above 50, 50% below.
+    Much more readable on radar than min-max which collapses small communes to near 0."""
+    ranked = series.rank(method="average", na_option="keep", pct=True) * 100
+    ranked = ranked.fillna(50.0)
+    return (100 - ranked if inverse else ranked).round(2)
 
 
 # -------------------------------------------------------------------
@@ -118,16 +119,32 @@ def _load_arcep() -> pd.DataFrame | None:
 
 
 def _load_osm() -> pd.DataFrame | None:
-    path = file_path("raw", "osm", "osm_poi_counts.parquet")
-    if not path.exists():
-        print("  [warn] OSM data not found — green/education/health/services scores will be neutral.")
-        print("         Run: python -m data_pipeline.ingestion.ingest_osm")
-        return None
-    df = pd.read_parquet(path)
-    if df.empty or "code_commune" not in df.columns:
-        print("  [warn] OSM data is empty — green/education/health/services scores will be neutral.")
-        return None
-    return df
+    # Priorité 1 : BPE INSEE (plus fiable, pas de timeout)
+    bpe_path = file_path("raw", "bpe", "bpe_scores_communes.parquet")
+    if bpe_path.exists():
+        df = pd.read_parquet(bpe_path)
+        if not df.empty and "code_commune" in df.columns:
+            # Rename transport_count to bus_stop_count for compatibility
+            if "transport_count" in df.columns and "bus_stop_count" not in df.columns:
+                df = df.rename(columns={"transport_count": "bus_stop_count"})
+            if "train_station_count" not in df.columns:
+                df["train_station_count"] = 0
+            if "forest_count" not in df.columns:
+                df["forest_count"] = 0
+            print(f"  BPE INSEE chargée : {len(df):,} communes")
+            return df
+
+    # Priorité 2 : OSM Overpass (fallback)
+    osm_path = file_path("raw", "osm", "osm_poi_counts.parquet")
+    if osm_path.exists():
+        df = pd.read_parquet(osm_path)
+        if not df.empty and "code_commune" in df.columns and len(df) > 0:
+            print(f"  OSM chargée : {len(df):,} communes")
+            return df
+
+    print("  [warn] Ni BPE ni OSM disponibles — scores à 50 (neutre).")
+    print("         Run: py -m data_pipeline.ingestion.ingest_bpe")
+    return None
 
 
 def _load_gtfs() -> pd.DataFrame | None:
@@ -313,15 +330,36 @@ def build_territory_gold(year: int) -> Path:
         for col in ["green_score", "education_score", "health_score", "services_score"]:
             frame[col] = 50.0
 
-    # 5. GTFS transport scores (optional)
-    print("Loading GTFS transport data...")
-    gtfs = _load_gtfs()
-    if gtfs is not None:
-        frame = frame.merge(gtfs, on="code_commune", how="left")
-        frame["transport_score"] = _normalize_0_100(frame["stop_count"].fillna(0))
-        print(f"  transport_score computed for {frame['transport_score'].notna().sum():,} communes")
+    # 5. Transport score — depuis OSM si disponible, sinon GTFS, sinon proxy population
+    if osm is not None and "bus_stop_count" in frame.columns:
+        pop = frame["population"].clip(lower=1).fillna(1)
+        raw_transport = (
+            frame["bus_stop_count"].fillna(0)
+            + frame.get("train_station_count", pd.Series(0, index=frame.index)).fillna(0) * 5
+        ) / pop * 10_000
+
+        n_nonzero = int((raw_transport > 0).sum())
+        coverage_pct = n_nonzero / len(raw_transport) * 100
+        # Percentile rank clusters tied zeros at ~50% — need 20%+ coverage to be meaningful
+        if coverage_pct >= 20:
+            frame["transport_score"] = _normalize_0_100(raw_transport)
+            print(f"  transport_score depuis OSM ({n_nonzero:,} communes, {coverage_pct:.1f}%)")
+        else:
+            # Too sparse — fall back to log(population): big city = more transport options
+            print(f"  [warn] OSM transport sparse ({coverage_pct:.1f}%) — proxy population")
+            frame["transport_score"] = _normalize_0_100(np.log1p(frame["population"].fillna(0)))
+            print(f"  transport_score (proxy population) pour {len(frame):,} communes")
     else:
-        frame["transport_score"] = 50.0
+        print("Loading GTFS transport data...")
+        gtfs = _load_gtfs()
+        if gtfs is not None:
+            frame = frame.merge(gtfs, on="code_commune", how="left")
+            frame["transport_score"] = _normalize_0_100(np.log1p(frame["stop_count"].fillna(0)))
+            print(f"  transport_score computed for {frame['transport_score'].notna().sum():,} communes")
+        else:
+            # Population proxy: larger cities = more transport options
+            frame["transport_score"] = _normalize_0_100(np.log1p(frame["population"].fillna(0)))
+            print(f"  transport_score (proxy population) pour {len(frame):,} communes")
 
     # 6. ARCEP network scores (optional)
     print("Loading ARCEP network data...")
@@ -405,6 +443,8 @@ def build_territory_gold(year: int) -> Path:
         "loyer_m2_app12", "loyer_m2_app3",
         "nb_annonces_app", "marche_locatif_actif",
         "taux_tfb_dept", "vl_m2_commune",
+        "school_count", "university_count", "hospital_count", "pharmacy_count",
+        "supermarket_count", "restaurant_count", "park_count", "bus_stop_count", "transport_count",
     ]
     frame = frame[[c for c in keep if c in frame.columns]]
     frame = frame.dropna(subset=["latitude", "longitude", "avg_price_m2"])
