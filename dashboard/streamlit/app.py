@@ -1,17 +1,22 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import requests
 import streamlit as st
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_LAKE = PROJECT_ROOT / "data_lake" / "gold"
 REAL_PATH = DATA_LAKE / "territories" / "territory_scores.parquet"
 DEMO_PATH = DATA_LAKE / "demo" / "territory_scores.parquet"
+# When set (e.g. http://localhost:8000), the dashboard reads through the
+# FastAPI/Hive stack instead of the local parquet files.
+API_URL = os.getenv("HOMEPEDIA_API_URL", "").rstrip("/")
 
 # Taux du marché français 2024 par durée
 TAUX_MARCHE = {10: 3.20, 15: 3.45, 20: 3.65, 25: 3.80, 30: 4.00}
@@ -30,6 +35,16 @@ CRITERIA_COLUMNS = {
 
 @st.cache_data
 def load_data() -> pd.DataFrame:
+    if API_URL:
+        try:
+            response = requests.get(f"{API_URL}/territories", timeout=60)
+            response.raise_for_status()
+            frame = pd.DataFrame(response.json())
+            if not frame.empty:
+                return frame
+            st.warning("L'API ne renvoie aucune donnée — repli sur les fichiers locaux.")
+        except Exception as exc:
+            st.warning(f"API injoignable ({exc}) — repli sur les fichiers locaux.")
     if REAL_PATH.exists():
         return pd.read_parquet(REAL_PATH)
     if DEMO_PATH.exists():

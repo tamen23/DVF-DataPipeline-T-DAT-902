@@ -6,7 +6,7 @@ homepedia:
       host: localhost
       user: homepedia
       password: homepedia
-      port: 5432
+      port: 5433
       dbname: homepedia
       schema: public
       threads: 4

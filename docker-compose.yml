@@ -108,7 +108,8 @@ services:
       POSTGRES_USER: homepedia
       POSTGRES_PASSWORD: homepedia
     ports:
-      - "5432:5432"
+      # 5433 on the host: 5432 is commonly taken by a native PostgreSQL install
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -116,6 +117,35 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # ── Airflow (orchestration) ─────────────────────────────────────
+  # Dev-mode standalone instance: scheduler + webserver + SQLite metadata.
+  # UI on http://localhost:8081 (admin password printed in the container
+  # logs: docker logs homepedia-airflow | grep password).
+  airflow:
+    image: apache/airflow:2.9.3-python3.11
+    container_name: homepedia-airflow
+    command: standalone
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      # Project deps installed at container start (dev convenience; bake an
+      # image for anything serious). Constraints differ from requirements.txt
+      # on purpose: Airflow 2.9 pins SQLAlchemy 1.4, and pandas >= 2.2 would
+      # demand SQLAlchemy 2.0 — pandas 2.1 works with both.
+      _PIP_ADDITIONAL_REQUIREMENTS: "pandas==2.1.4 pyarrow>=15.0.0 requests>=2.31.0 psycopg2-binary>=2.9.9 PyYAML>=6.0.0"
+      # The DAG's load_postgres task reaches the postgres service by its
+      # compose hostname, not localhost.
+      DATABASE_URL: postgresql://homepedia:homepedia@postgres:5432/homepedia
+      DATA_LAKE_PATH: /opt/airflow/homepedia/data_lake
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - .:/opt/airflow/homepedia
+    ports:
+      - "8081:8080"
 
   # ── Kafka ─────────────────────────────────────────────────────────
   zookeeper:

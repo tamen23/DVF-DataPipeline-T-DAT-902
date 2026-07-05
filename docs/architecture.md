@@ -1,40 +1,55 @@
 # Architecture
 
-HOMEPEDIA follows a lakehouse-style local architecture compatible with AWS or Azure.
+HOMEPEDIA is a lakehouse running locally on Docker, with two serving branches
+fed by the same medallion data lake: a big-data branch (HDFS + Hive) and a
+relational branch (PostgreSQL/PostGIS + dbt).
 
-## Layers
+## Data lake layers (local `data_lake/`, mirrored in HDFS)
 
-- `raw`: immutable input files from DVF, INSEE, DataGouv, ARCEP, and transport APIs.
-- `bronze`: standardized files with normalized column names and Parquet storage.
-- `silver`: cleaned business entities with typed columns and normalized commune codes.
-- `gold`: BI-ready marts with KPIs, rankings, and scores.
+- `raw`: immutable input files (DVF, INSEE, geo.api.gouv.fr, ARCEP, OSM, GTFS) with import metadata.
+- `bronze`: standardized columns, typed Parquet. Kafka listings land here via the bronze consumer.
+- `silver`: cleaned business entities (DVF transactions, per-commune listing stats), normalized INSEE codes.
+- `gold`: BI-ready marts — real-estate KPIs per commune/year, territory scores per persona.
 
-## Components
-
-- Python ingestion scripts collect files and preserve import metadata.
-- Pandas handles MVP transformations.
-- PySpark is available for high-volume DVF aggregations.
-- PostgreSQL/PostGIS stores relational and geographic data.
-- DBT documents and models BI marts.
-- Airflow orchestrates the end-to-end pipeline.
-- Power BI is the main BI layer.
-- Streamlit is provided as a rapid prototype.
-- FastAPI exposes selected indicators when an API layer is needed.
-
-## Target Flow
+## Flow
 
 ```text
-CSV/API
-  -> raw
-  -> bronze Parquet
-  -> silver Parquet
-  -> gold Parquet
-  -> PostgreSQL/PostGIS
-  -> DBT marts
-  -> Power BI / API / Streamlit
+Open data (CSV/API)          Scrapers (SeLoger, LeBonCoin, CDC Habitat)
+        |                                   |
+        v                              Kafka topics
+   raw -> bronze -> silver -> gold          |
+        (pandas, or PySpark          bronze consumer -> silver_listings
+         with USE_SPARK=1)
+        |
+        +--> quality gate (check_gold: hard failures + warnings)
+        |
+        +--> HDFS upload + MSCK repair -> Hive external tables -> FastAPI -> Streamlit
+        |                                                      -> Power BI
+        +--> load_postgres -> PostgreSQL/PostGIS -> dbt marts  -> Power BI / psql
 ```
 
-## MVP Boundary
+## Components (all wired)
 
-The first version should only prove the full data path with DVF and commune reference data. Network, transport, and socio-economic indicators are added once the pipeline is stable.
+- **Ingestion** (`data_pipeline/ingestion/`): one script per source, metadata preserved; `upload_to_hdfs` publishes to HDFS and registers Hive partitions.
+- **Transformation**: pandas jobs by default; `data_pipeline/spark_jobs/aggregate_dvf.py` is a feature-equivalent PySpark implementation of the gold aggregation (`USE_SPARK=1 ./pipeline.sh`).
+- **Streaming** (`data_pipeline/streaming/`): Kafka producers run the scrapers, the bronze consumer batches listings to Parquet; `silver_listings` aggregates them per commune (postal → INSEE translation included).
+- **Quality** (`data_pipeline/quality_checks/`): gate between gold and publication; systematic anomalies fail the run, isolated outliers warn.
+- **Hive/HDFS** (docker-compose: namenode, datanode, metastore, hive-server): external tables over the gold/silver Parquet, queried by the API.
+- **PostgreSQL/PostGIS** (docker-compose: postgres): `data_pipeline/export/load_postgres.py` loads reference tables, transactions and scores; `database/schema.sql` is applied automatically.
+- **dbt** (`dbt/`): staging → intermediate → marts over the Postgres tables (`cd dbt && dbt run`).
+- **Airflow** (docker-compose: airflow, UI on :8081): `homepedia_dvf_pipeline` DAG runs ingest → bronze → silver → gold → quality → load_postgres. `pipeline.sh`/`pipeline.bat` are the equivalent CLI orchestrators (they add the HDFS upload, which needs the host's docker CLI).
+- **FastAPI** (`backend/`): serves Hive data (parameterized HiveQL); `/territories` is the bulk endpoint for BI/dashboard.
+- **Streamlit** (`dashboard/`): reads the API when `HOMEPEDIA_API_URL` is set, falls back to local gold Parquet; live listings scraping on demand.
+- **Power BI**: connects to Hive views (`vw_ranking`, `vw_commune_full`) or Postgres/dbt marts — see `docs/powerbi_views.md`.
 
+## Design notes
+
+- Computation runs where the data volume justifies it: pandas for the MVP scale, Spark available for full-France DVF via the same interface and output contract.
+- Both serving branches consume the same gold Parquet, so Hive and Postgres never disagree on numbers.
+- The quality gate distinguishes systematic corruption (fails the pipeline) from expected small-commune noise (warns).
+
+## MVP boundary
+
+The DVF + commune reference path is the proven core. Network, transport and
+socio-economic indicators enrich the territory scores when their sources have
+been ingested; every enrichment is optional and degrades to a neutral score.

@@ -43,6 +43,12 @@ def communes(code_departement: str | None = None, limit: int = Query(default=500
     )
 
 
+@app.get("/territories")
+def territories():
+    """Full gold_territory_scores dump — used by the Streamlit dashboard and BI tools."""
+    return execute_query("SELECT * FROM gold_territory_scores")
+
+
 @app.get("/scores")
 def scores(code_commune: str | None = None, region: str | None = None, limit: int = Query(default=100, le=5000)):
     where_clauses = []

@@ -89,44 +89,56 @@ Copy the environment file:
 cp .env.example .env
 ```
 
-Run the local pipeline with a local DVF CSV:
+Start the infrastructure (HDFS, Hive, Postgres, Kafka, Airflow):
+
+```bash
+docker compose up -d
+```
+
+Run the full pipeline (ingestion → gold → quality → HDFS → Postgres):
+
+```bash
+./pipeline.sh 2023          # Linux/macOS (Windows: pipeline.bat 2023)
+USE_SPARK=1 ./pipeline.sh   # gold aggregation with PySpark (requires Java)
+SKIP_POSTGRES=1 ./pipeline.sh  # skip the Postgres/dbt branch
+```
+
+Or step by step with a local DVF CSV:
 
 ```bash
 python -m data_pipeline.ingestion.ingest_dvf --input ../path/to/dvf.csv --year 2022
 python -m data_pipeline.transformation.bronze_dvf --year 2022
 python -m data_pipeline.cleaning.silver_dvf --year 2022
 python -m data_pipeline.transformation.gold_real_estate --year 2022
-```
-
-Run quality checks:
-
-```bash
 python -m data_pipeline.quality_checks.check_gold --year 2022
 ```
 
-Start PostgreSQL:
+Load PostgreSQL and run the dbt marts (schema.sql is applied automatically):
 
 ```bash
-docker compose up -d postgres
+python -m data_pipeline.export.load_postgres --year 2023
+cp dbt/profiles.yml.example dbt/profiles.yml
+cd dbt && dbt run --profiles-dir .
 ```
 
-Load the schema:
+Orchestrate with Airflow instead of the shell scripts (UI on http://localhost:8081,
+admin password: `docker logs homepedia-airflow 2>&1 | grep -i password`):
 
 ```bash
-# DATABASE_URL=postgresql://homepedia:homepedia@localhost:5432/homepedia
-psql "$DATABASE_URL" -f database/schema.sql
+docker compose up -d airflow
+# then trigger the homepedia_dvf_pipeline DAG from the UI
 ```
 
-Start the API:
+Start the API (reads Hive):
 
 ```bash
 uvicorn backend.app.main:app --reload
 ```
 
-Start the Streamlit prototype:
+Start the Streamlit dashboard (reads the API, falls back to local parquet):
 
 ```bash
-python -m streamlit run dashboard/streamlit/app.py
+HOMEPEDIA_API_URL=http://localhost:8000 python -m streamlit run dashboard/streamlit/app.py
 ```
 
 ## Data Lake Layers

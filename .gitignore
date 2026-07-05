@@ -14,3 +14,8 @@ data_lake/gold/*
 *.parquet
 *.duckdb
 logs/
+dbt/profiles.yml
+dbt/target/
+dbt/logs/
+dbt/dbt_packages/
+dbt/.user.yml
