@@ -25,7 +25,7 @@ def build_bronze_dvf(year: int, chunksize: int = 100_000) -> None:
         raise ValueError(f"No rows found in {raw_path}")
 
     bronze = pd.concat(chunks, ignore_index=True)
-    for col in bronze.select_dtypes(include=["object", "str"]).columns:
+    for col in bronze.select_dtypes(include=["object"]).columns:
         bronze[col] = bronze[col].astype(str)
     bronze.to_parquet(bronze_path, index=False)
     print(f"Bronze DVF written to {bronze_path} ({len(bronze):,} rows)")

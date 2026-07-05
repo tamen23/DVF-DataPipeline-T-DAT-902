@@ -113,6 +113,7 @@ docker compose up -d postgres
 Load the schema:
 
 ```bash
+# DATABASE_URL=postgresql://homepedia:homepedia@localhost:5432/homepedia
 psql "$DATABASE_URL" -f database/schema.sql
 ```
 

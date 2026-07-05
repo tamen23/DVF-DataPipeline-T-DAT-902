@@ -19,31 +19,45 @@ def regions():
 
 @app.get("/departements")
 def departements(code_region: str | None = None):
+    where = ""
+    params: dict = {}
     if code_region:
-        return execute_query(
-            "SELECT code_departement, nom_departement, code_region FROM departements WHERE code_region = '{}' ORDER BY code_departement".format(code_region)
-        )
-    return execute_query("SELECT code_departement, nom_departement, code_region FROM departements ORDER BY code_departement")
+        where = "WHERE code_region = %(code_region)s"
+        params["code_region"] = code_region
+    return execute_query(
+        f"SELECT code_departement, nom_departement, code_region FROM departements {where} ORDER BY code_departement",
+        params,
+    )
 
 
 @app.get("/communes")
 def communes(code_departement: str | None = None, limit: int = Query(default=500, le=5000)):
+    where = ""
+    params: dict = {"limit": limit}
     if code_departement:
-        return execute_query(
-            "SELECT code_commune, nom_commune, latitude, longitude, population FROM communes WHERE code_departement = '{}' ORDER BY nom_commune LIMIT {}".format(code_departement, limit)
-        )
-    return execute_query(f"SELECT code_commune, nom_commune, latitude, longitude, population FROM communes ORDER BY nom_commune LIMIT {limit}")
+        where = "WHERE code_departement = %(code_departement)s"
+        params["code_departement"] = code_departement
+    return execute_query(
+        f"SELECT code_commune, nom_commune, latitude, longitude, population FROM communes {where} ORDER BY nom_commune LIMIT %(limit)s",
+        params,
+    )
 
 
 @app.get("/scores")
 def scores(code_commune: str | None = None, region: str | None = None, limit: int = Query(default=100, le=5000)):
     where_clauses = []
+    params: dict = {"limit": limit}
     if code_commune:
-        where_clauses.append(f"code_commune = '{code_commune}'")
+        where_clauses.append("code_commune = %(code_commune)s")
+        params["code_commune"] = code_commune
     if region:
-        where_clauses.append(f"region = '{region}'")
+        where_clauses.append("region = %(region)s")
+        params["region"] = region
     where = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
-    return execute_query(f"SELECT * FROM gold_territory_scores {where} ORDER BY score_etudiant DESC LIMIT {limit}")
+    return execute_query(
+        f"SELECT * FROM gold_territory_scores {where} ORDER BY score_etudiant DESC LIMIT %(limit)s",
+        params,
+    )
 
 
 @app.get("/ranking")
@@ -53,16 +67,19 @@ def ranking(
     max_price_m2: float | None = None,
     limit: int = Query(default=50, le=500),
 ):
-    score_col = f"score_{persona}"
     valid_personas = ["etudiant", "jeune_actif", "famille", "personne_agee", "investisseur"]
     if persona not in valid_personas:
         raise HTTPException(status_code=400, detail=f"Invalid persona. Choose from: {valid_personas}")
+    score_col = f"score_{persona}"
 
     where_clauses = []
+    params: dict = {"limit": limit}
     if region:
-        where_clauses.append(f"region = '{region}'")
-    if max_price_m2:
-        where_clauses.append(f"avg_price_m2 <= {max_price_m2}")
+        where_clauses.append("region = %(region)s")
+        params["region"] = region
+    if max_price_m2 is not None:
+        where_clauses.append("avg_price_m2 <= %(max_price_m2)s")
+        params["max_price_m2"] = max_price_m2
     where = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
 
     return execute_query(
@@ -74,15 +91,17 @@ def ranking(
         FROM gold_territory_scores
         {where}
         ORDER BY {score_col} DESC
-        LIMIT {limit}
-        """
+        LIMIT %(limit)s
+        """,
+        params,
     )
 
 
 @app.get("/commune/{code_commune}")
 def commune_detail(code_commune: str):
     results = execute_query(
-        f"SELECT * FROM vw_commune_full WHERE code_commune = '{code_commune}' LIMIT 1"
+        "SELECT * FROM vw_commune_full WHERE code_commune = %(code_commune)s LIMIT 1",
+        {"code_commune": code_commune},
     )
     if not results:
         raise HTTPException(status_code=404, detail="Commune not found")
@@ -91,8 +110,11 @@ def commune_detail(code_commune: str):
 
 @app.get("/compare")
 def compare(codes: str = Query(description="Comma-separated commune codes, e.g. 75056,69123")):
-    code_list = [c.strip() for c in codes.split(",")]
-    codes_str = ", ".join(f"'{c}'" for c in code_list)
+    code_list = [c.strip() for c in codes.split(",") if c.strip()]
+    if not code_list:
+        raise HTTPException(status_code=400, detail="No commune codes provided")
+    params = {f"code_{i}": code for i, code in enumerate(code_list)}
+    placeholders = ", ".join(f"%(code_{i})s" for i in range(len(code_list)))
     return execute_query(
         f"""
         SELECT code_commune, nom_commune, region, avg_price_m2,
@@ -101,28 +123,38 @@ def compare(codes: str = Query(description="Comma-separated commune codes, e.g. 
                score_etudiant, score_jeune_actif, score_famille,
                score_personne_agee, score_investisseur
         FROM gold_territory_scores
-        WHERE code_commune IN ({codes_str})
+        WHERE code_commune IN ({placeholders})
         ORDER BY nom_commune
-        """
+        """,
+        params,
     )
 
 
 @app.get("/stats/real-estate")
 def real_estate_stats(code_commune: str, year: int | None = None):
-    where = f"WHERE code_commune = '{code_commune}'"
-    if year:
-        where += f" AND year = {year}"
+    where = "WHERE code_commune = %(code_commune)s"
+    params: dict = {"code_commune": code_commune}
+    if year is not None:
+        where += " AND year = %(year)s"
+        params["year"] = year
     return execute_query(
-        f"SELECT * FROM gold_real_estate {where} ORDER BY year DESC"
+        f"SELECT * FROM gold_real_estate {where} ORDER BY year DESC",
+        params,
     )
 
 
 @app.get("/listings")
 def listings(code_commune: str | None = None, source: str | None = None):
     where_clauses = []
+    params: dict = {}
     if code_commune:
-        where_clauses.append(f"code_commune = '{code_commune}'")
+        where_clauses.append("code_commune = %(code_commune)s")
+        params["code_commune"] = code_commune
     if source:
-        where_clauses.append(f"source_name = '{source}'")
+        where_clauses.append("source_name = %(source)s")
+        params["source"] = source
     where = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
-    return execute_query(f"SELECT * FROM silver_listings {where} ORDER BY avg_listing_price_m2 DESC LIMIT 100")
+    return execute_query(
+        f"SELECT * FROM silver_listings {where} ORDER BY avg_listing_price_m2 DESC LIMIT 100",
+        params,
+    )

@@ -10,7 +10,7 @@ import requests
 from data_pipeline.settings import file_path
 
 # geo.api.gouv.fr — communes with coordinates, department, region
-GEO_API_URL = "https://geo.api.gouv.fr/communes?fields=code,nom,codeDepartement,codeRegion,centre,population&format=json&geometry=centre"
+GEO_API_URL = "https://geo.api.gouv.fr/communes?fields=code,nom,codeDepartement,codeRegion,centre,population,codesPostaux&format=json&geometry=centre"
 
 # regions reference
 REGIONS_URL = "https://geo.api.gouv.fr/regions?fields=code,nom&format=json"
@@ -41,6 +41,7 @@ def ingest_communes() -> Path:
             "longitude": centre[0],
             "latitude": centre[1],
             "population": c.get("population"),
+            "codes_postaux": ",".join(c.get("codesPostaux") or []),
         })
 
     frame = pd.DataFrame(rows)

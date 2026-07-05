@@ -7,8 +7,10 @@ import pandas as pd
 
 from data_pipeline.settings import file_path
 
-# Price boundaries per m² considered realistic for France
-PRICE_M2_MIN = 500
+# Price boundaries per m² considered realistic for France.
+# Must stay aligned with the gold builder, which keeps prices down to 200 EUR/m²
+# (rural communes legitimately average below 500).
+PRICE_M2_MIN = 200
 PRICE_M2_MAX = 30_000
 
 # A commune with fewer transactions than this is suspicious in the gold layer
@@ -23,9 +25,10 @@ class CheckResult:
     name: str
     passed: bool
     detail: str = ""
+    warn_only: bool = False
 
     def __str__(self) -> str:
-        status = "OK" if self.passed else "FAILED"
+        status = "OK" if self.passed else ("WARN" if self.warn_only else "FAILED")
         suffix = f" — {self.detail}" if self.detail else ""
         return f"  [{status}] {self.name}{suffix}"
 
@@ -33,8 +36,8 @@ class CheckResult:
 def run_checks(frame: pd.DataFrame, year: int) -> list[CheckResult]:
     results: list[CheckResult] = []
 
-    def check(name: str, condition: bool, detail: str = "") -> None:
-        results.append(CheckResult(name, condition, detail))
+    def check(name: str, condition: bool, detail: str = "", warn_only: bool = False) -> None:
+        results.append(CheckResult(name, condition, detail, warn_only))
 
     # --- Structure ---
     check("non_empty", len(frame) > 0, f"{len(frame):,} rows")
@@ -84,13 +87,23 @@ def run_checks(frame: pd.DataFrame, year: int) -> list[CheckResult]:
     check("year_matches_expected", wrong_year == 0, f"{wrong_year} rows with unexpected year value")
 
     # --- YoY variation sanity (if present) ---
+    # With a 3-transaction minimum per commune, >100% swings legitimately
+    # happen in isolated small communes (warning), but many communes moving
+    # >100% at once means systematic corruption (hard failure).
     if "price_m2_yoy_variation" in frame.columns:
         yoy = frame["price_m2_yoy_variation"].dropna()
         extreme_growth = (yoy.abs() > 1.0).sum()
+        extreme_ratio = extreme_growth / len(yoy) if len(yoy) else 0.0
+        check(
+            "yoy_variation_not_systematic",
+            extreme_ratio <= 0.10,
+            f"{extreme_ratio:.1%} of communes with >100% YoY price change",
+        )
         check(
             "yoy_variation_realistic",
             extreme_growth == 0,
             f"{extreme_growth} communes with >100% YoY price change",
+            warn_only=True,
         )
 
     # --- Coverage ---
@@ -117,8 +130,11 @@ def check_gold_real_estate(year: int) -> None:
     for result in results:
         print(result)
 
-    failed = [r for r in results if not r.passed]
-    print(f"\n{len(results) - len(failed)}/{len(results)} checks passed.")
+    failed = [r for r in results if not r.passed and not r.warn_only]
+    warned = [r for r in results if not r.passed and r.warn_only]
+    passed = sum(1 for r in results if r.passed)
+    print(f"\n{passed}/{len(results)} checks passed"
+          f"{f', {len(warned)} warning(s)' if warned else ''}.")
 
     if failed:
         raise SystemExit(f"\nQuality checks failed: {', '.join(r.name for r in failed)}")

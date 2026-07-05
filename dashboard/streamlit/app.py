@@ -965,17 +965,25 @@ with prof_col2:
 
     st.markdown("#### Annonces disponibles")
     code_commune = str(sim_row.get("code_commune", ""))
-    postal_code = str(sim_row.get("code_postal", str(sim_row.get("code_departement", "")).zfill(2) + "000"))
+    dept = str(sim_row.get("code_departement", ""))
+    if dept.startswith("97"):
+        fallback_postal = dept.ljust(5, "0")  # DOM: "971" -> "97100"
+    elif dept.upper() in ("2A", "2B"):
+        fallback_postal = "20000"  # Corse: postal codes start with 20
+    else:
+        fallback_postal = dept.zfill(2) + "000"
+    postal_code = str(sim_row.get("code_postal", fallback_postal))
     if "listings" not in st.session_state:
         st.session_state.listings = None
     if "listings_commune" not in st.session_state:
         st.session_state.listings_commune = None
 
+    from scraper_service import fetch_listings
+
     btn_achat, btn_location = st.columns(2)
     with btn_achat:
         if st.button("🏠 Annonces d'achat", type="primary", use_container_width=True):
             with st.spinner(f"Recherche achat pour {sim_commune}..."):
-                from dashboard.streamlit.scraper_service import fetch_listings
                 st.session_state.listings = fetch_listings(
                     code_commune=code_commune, nom_commune=sim_commune,
                     postal_code=postal_code, pages=2, mode="achat",
@@ -985,7 +993,6 @@ with prof_col2:
         if st.button("🔑 Annonces de location", use_container_width=True,
                      help="Voir ce que les locataires paient dans cette commune"):
             with st.spinner(f"Recherche location pour {sim_commune}..."):
-                from dashboard.streamlit.scraper_service import fetch_listings
                 st.session_state.listings = fetch_listings(
                     code_commune=code_commune, nom_commune=sim_commune,
                     postal_code=postal_code, pages=2, mode="location",

@@ -99,6 +99,24 @@ services:
       - "10000:10000"
       - "10002:10002"
 
+  # ── PostgreSQL (schema.sql / dbt models) ────────────────────────
+  postgres:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: homepedia-postgres
+    environment:
+      POSTGRES_DB: homepedia
+      POSTGRES_USER: homepedia
+      POSTGRES_PASSWORD: homepedia
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U homepedia -d homepedia"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # ── Kafka ─────────────────────────────────────────────────────────
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.0
@@ -119,7 +137,12 @@ services:
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      # Two listeners: containers reach the broker at kafka:29092,
+      # the host (producers/consumers run locally) at localhost:9092.
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
       KAFKA_LOG_RETENTION_HOURS: 168
@@ -139,9 +162,10 @@ services:
       - "8080:8080"
     environment:
       KAFKA_CLUSTERS_0_NAME: homepedia
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
 
 volumes:
   namenode_data:
   datanode_data:
   hive_metastore_data:
+  postgres_data:

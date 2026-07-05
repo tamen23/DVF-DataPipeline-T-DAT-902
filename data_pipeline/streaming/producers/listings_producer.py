@@ -7,7 +7,7 @@ Runs scrapers on a schedule and pushes each listing as a JSON message to Kafka.
 Usage:
   python -m data_pipeline.streaming.producers.listings_producer --source seloger --communes 75056 69123 31555
   python -m data_pipeline.streaming.producers.listings_producer --source leboncoin --communes 75001 69001
-  python -m data_pipeline.streaming.producers.listings_producer --source cdc_habitat
+  python -m data_pipeline.streaming.producers.listings_producer --source cdc_habitat --communes Choisy-le-Roi
 """
 
 import argparse
@@ -77,7 +77,7 @@ def run_producer(source: str, communes: list[str], loop: bool = False) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Kafka producer for real estate listings.")
     parser.add_argument("--source", required=True, choices=list(SCRAPERS))
-    parser.add_argument("--communes", nargs="+", default=[], help="INSEE/postal codes to scrape.")
+    parser.add_argument("--communes", nargs="+", required=True, help="INSEE/postal codes (or commune names for cdc_habitat) to scrape.")
     parser.add_argument("--loop", action="store_true", help="Run continuously on a schedule.")
     args = parser.parse_args()
     run_producer(args.source, args.communes, loop=args.loop)

@@ -7,9 +7,13 @@ and writes them to the bronze data lake as Parquet files.
 Messages are batched (500 listings or 60 seconds, whichever comes first)
 then flushed to bronze/listings/{source}/{date}/batch_{timestamp}.parquet
 
+Runs as a long-lived service by default; pass --idle-timeout for batch-style
+invocations that should exit once the topics have been quiet for N seconds.
+
 Usage:
   python -m data_pipeline.streaming.consumers.bronze_consumer
   python -m data_pipeline.streaming.consumers.bronze_consumer --sources seloger leboncoin
+  python -m data_pipeline.streaming.consumers.bronze_consumer --idle-timeout 120
 """
 
 import argparse
@@ -48,7 +52,7 @@ def _flush_batch(source: str, batch: list[dict]) -> None:
     print(f"  [{source}] Flushed {len(batch)} listings → {output}")
 
 
-def run_consumer(sources: list[str] | None = None) -> None:
+def run_consumer(sources: list[str] | None = None, idle_timeout: int | None = None) -> None:
     topics_to_consume = (
         [TOPICS[s] for s in sources if s in TOPICS]
         if sources
@@ -64,23 +68,34 @@ def run_consumer(sources: list[str] | None = None) -> None:
         value_deserializer=lambda v: json.loads(v.decode("utf-8")),
         auto_offset_reset="earliest",
         enable_auto_commit=True,
-        consumer_timeout_ms=BATCH_TIMEOUT * 1000,
     )
 
     # One buffer per source
     buffers: dict[str, list[dict]] = defaultdict(list)
     last_flush = datetime.now(timezone.utc).timestamp()
+    last_message = last_flush
 
     try:
-        for message in consumer:
-            listing = message.value
-            source = listing.get("source", "unknown")
-            buffers[source].append(listing)
+        # poll() instead of iterating the consumer: iteration stops after a
+        # timeout, but this service must keep running (and keep flushing on
+        # the time trigger) even when the topics are quiet.
+        while True:
+            records = consumer.poll(timeout_ms=1000)
+            for _, messages in records.items():
+                for message in messages:
+                    listing = message.value
+                    source = listing.get("source", "unknown")
+                    buffers[source].append(listing)
 
             now = datetime.now(timezone.utc).timestamp()
+            if records:
+                last_message = now
+            elif idle_timeout and (now - last_message) >= idle_timeout:
+                print(f"\nNo messages for {idle_timeout}s — exiting (idle timeout).")
+                break
             should_flush = (
-                len(buffers[source]) >= BATCH_SIZE
-                or (now - last_flush) >= BATCH_TIMEOUT
+                any(len(batch) >= BATCH_SIZE for batch in buffers.values())
+                or ((now - last_flush) >= BATCH_TIMEOUT and any(buffers.values()))
             )
 
             if should_flush:
@@ -102,8 +117,10 @@ def run_consumer(sources: list[str] | None = None) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Kafka consumer — writes listings to bronze layer.")
     parser.add_argument("--sources", nargs="+", default=None, choices=list(TOPICS))
+    parser.add_argument("--idle-timeout", type=int, default=None,
+                        help="Exit after this many seconds without messages (default: run forever).")
     args = parser.parse_args()
-    run_consumer(args.sources)
+    run_consumer(args.sources, idle_timeout=args.idle_timeout)
 
 
 if __name__ == "__main__":

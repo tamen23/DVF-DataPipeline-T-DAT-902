@@ -58,7 +58,7 @@ def _overpass_query(dept_code: str, osm_filter: str) -> list[dict]:
     """Count nodes+ways matching osm_filter inside each commune of the department."""
     query = f"""
 [out:json][timeout:120];
-area["ref:INSEE"~"^{dept_code}"](if:length(t["ref:INSEE"]) == {len(dept_code) + 3 if dept_code.startswith("97") else 5})[admin_level=8]->.communes;
+area["ref:INSEE"~"^{dept_code}"](if:length(t["ref:INSEE"]) == 5)[admin_level=8]->.communes;
 foreach.communes(
   .communes is_in;
   area._[admin_level=8]->.commune;

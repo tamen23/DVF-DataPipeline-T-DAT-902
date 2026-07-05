@@ -355,7 +355,8 @@ def build_territory_gold(year: int) -> Path:
         frame = frame.merge(taxe, on="code_commune", how="left")
         print(f"  taux_tfb_dept disponible pour {frame['taux_tfb_dept'].notna().sum():,} communes")
     else:
-        frame["taux_tfb"] = None
+        frame["taux_tfb_dept"] = None
+        frame["vl_m2_commune"] = None
 
     # 9. INSEE income scores (optional)
     print("Loading INSEE Filosofi data...")

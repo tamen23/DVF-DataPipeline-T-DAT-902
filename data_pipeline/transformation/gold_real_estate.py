@@ -39,7 +39,10 @@ def build_gold_real_estate(year: int) -> None:
     print(f"  Removed {before - len(grouped):,} communes with < 3 transactions ({len(grouped):,} kept)")
 
     previous_year_path = file_path("gold", "real_estate", str(year - 1), f"real_estate_commune_{year - 1}.parquet")
-    grouped["price_m2_yoy_variation"] = None
+    # Keep the column float-typed even when no previous year exists; an
+    # all-None object column would be written as parquet `null` type, which
+    # Hive cannot read back as DOUBLE.
+    grouped["price_m2_yoy_variation"] = float("nan")
     if previous_year_path.exists():
         previous = pd.read_parquet(previous_year_path)[["code_commune", "avg_price_m2"]]
         previous = previous.rename(columns={"avg_price_m2": "previous_avg_price_m2"})

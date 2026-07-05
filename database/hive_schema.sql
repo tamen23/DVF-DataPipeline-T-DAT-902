@@ -1,6 +1,14 @@
 -- HOMEPEDIA — Hive Schema
 -- Tables are EXTERNAL: data lives in HDFS as Parquet files
 -- The pipeline writes Parquet to HDFS, Hive just provides the SQL interface on top
+--
+-- MIGRATION NOTE (existing deployments only): the communes table LOCATION
+-- moved to /homepedia/raw/communes/communes/. CREATE ... IF NOT EXISTS does
+-- not relocate an existing table, so on a metastore created before this
+-- change run first:
+--   DROP TABLE IF EXISTS communes;
+-- and remove the old flat files from HDFS:
+--   hdfs dfs -rm /homepedia/raw/communes/*.parquet
 
 CREATE DATABASE IF NOT EXISTS homepedia;
 USE homepedia;
@@ -32,7 +40,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS communes (
     population          INT
 )
 STORED AS PARQUET
-LOCATION 'hdfs://namenode:8020/homepedia/raw/communes/';
+LOCATION 'hdfs://namenode:8020/homepedia/raw/communes/communes/';
 
 -- ── Gold — Real estate aggregates ─────────────────────────────────
 
@@ -87,16 +95,6 @@ CREATE EXTERNAL TABLE IF NOT EXISTS gold_territory_scores (
 STORED AS PARQUET
 LOCATION 'hdfs://namenode:8020/homepedia/gold/territories/';
 
--- ── Gold — Network coverage ───────────────────────────────────────
-
-CREATE EXTERNAL TABLE IF NOT EXISTS gold_network_coverage (
-    code_commune        STRING,
-    network_score_raw   DOUBLE,
-    network_score       DOUBLE
-)
-STORED AS PARQUET
-LOCATION 'hdfs://namenode:8020/homepedia/raw/arcep/';
-
 -- ── Gold — Real estate listings (from Kafka streaming) ───────────
 
 CREATE EXTERNAL TABLE IF NOT EXISTS bronze_listings (
@@ -134,13 +132,22 @@ LOCATION 'hdfs://namenode:8020/homepedia/silver/listings/';
 
 -- ── Useful views ──────────────────────────────────────────────────
 
+-- silver_listings has one row per (source_name, commune): aggregate across
+-- sources before joining so the view stays one row per commune.
 CREATE OR REPLACE VIEW vw_commune_full AS
 SELECT
     t.*,
     l.avg_listing_price_m2,
     l.listing_count
 FROM gold_territory_scores t
-LEFT JOIN silver_listings l ON l.code_commune = t.code_commune;
+LEFT JOIN (
+    SELECT
+        code_commune,
+        AVG(avg_listing_price_m2) AS avg_listing_price_m2,
+        SUM(listing_count)        AS listing_count
+    FROM silver_listings
+    GROUP BY code_commune
+) l ON l.code_commune = t.code_commune;
 
 CREATE OR REPLACE VIEW vw_ranking AS
 SELECT

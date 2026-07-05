@@ -17,7 +17,7 @@ def get_connection() -> hive.Connection:
         port=HIVE_PORT,
         database=HIVE_DATABASE,
         username=HIVE_USERNAME,
-        auth="NOSASL",
+        auth="NONE",
     )
 
 
@@ -35,6 +35,8 @@ def get_db():
 def execute_query(query: str, params: dict | None = None) -> list[dict]:
     """Execute a HiveQL query and return results as list of dicts."""
     with get_db() as cursor:
-        cursor.execute(query)
+        # An empty dict must become None: pyhive only skips %-formatting
+        # when params is None, and formatting with {} breaks any literal %.
+        cursor.execute(query, params or None)
         columns = [col[0].split(".")[-1] for col in cursor.description]
         return [dict(zip(columns, row)) for row in cursor.fetchall()]
