@@ -958,6 +958,14 @@ with col_map:
         zoom, center_lat, center_lon = 5, 46.5, 2.3
         map_display = df_all.copy()
 
+    # Vue nationale avec ~25 000 communes réelles : le JSON Plotly (points +
+    # tooltips) dépasse 10 Mo et fige le navigateur. On plafonne aux communes
+    # les plus peuplées ; le filtre département affiche tout son détail.
+    _map_cap = 3000
+    _map_truncated = len(map_display) > _map_cap
+    if _map_truncated:
+        map_display = map_display.nlargest(_map_cap, "population")
+
     map_display["cashflow_affiche"] = map_display["cashflow_mensuel"].clip(-500, 500)
     map_display["_tooltip"] = map_display.apply(lambda r: (
         f"<b>{r['nom_commune']}</b> ({r.get('code_departement','')})<br>"
@@ -999,7 +1007,11 @@ with col_map:
     )
     st.plotly_chart(fig_map, use_container_width=True, key="map_principale")
 
-st.caption("🟢 Vert = cash-flow positif (loyer > mensualité) · 🔴 Rouge = effort mensuel nécessaire")
+st.caption(
+    "🟢 Vert = cash-flow positif (loyer > mensualité) · 🔴 Rouge = effort mensuel nécessaire"
+    + (" · Carte nationale limitée aux 3 000 communes les plus peuplées — choisissez un département pour le détail complet"
+       if _map_truncated else "")
+)
 
 st.divider()
 
