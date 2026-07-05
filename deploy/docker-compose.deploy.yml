@@ -1,0 +1,92 @@
+# HOMEPEDIA — profil de déploiement LÉGER (démo/présentation)
+# Dashboard + PostgreSQL/PostGIS + Grafana + MongoDB (~1,5 Go RAM).
+# La stack big data complète (HDFS/Hive/Kafka/Airflow) reste locale/dev :
+# elle ne tient pas à côté des autres projets du serveur.
+#
+#   démarrer : docker compose -f deploy/docker-compose.deploy.yml up -d --build
+#   arrêter  : docker compose -f deploy/docker-compose.deploy.yml down
+#
+# Ports serveur : 8501 dashboard (public), 3002 Grafana (public),
+# Postgres/Mongo en local uniquement (127.0.0.1).
+
+name: homepedia
+
+services:
+  dashboard:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.dashboard
+    container_name: homepedia-dashboard
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    mem_limit: 900m
+
+  postgres:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: homepedia-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: homepedia
+      POSTGRES_USER: homepedia
+      POSTGRES_PASSWORD: homepedia
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - homepedia_pg:/var/lib/postgresql/data
+    mem_limit: 400m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U homepedia -d homepedia"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Charge les référentiels + scores démo dans Postgres (one-shot au démarrage)
+  loader:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.dashboard
+    container_name: homepedia-loader
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://homepedia:homepedia@postgres:5432/homepedia
+    command: >
+      sh -c "python -m data_pipeline.ingestion.ingest_communes &&
+             python -m data_pipeline.export.load_postgres --year 2023 --skip-transactions"
+    restart: "no"
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: homepedia-grafana
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: homepedia
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3002:3000"
+    volumes:
+      - homepedia_grafana:/var/lib/grafana
+      - ../grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../grafana/dashboards:/var/lib/grafana/dashboards:ro
+    mem_limit: 300m
+
+  mongo:
+    image: mongo:7
+    container_name: homepedia-mongo
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - homepedia_mongo:/data/db
+    mem_limit: 300m
+
+volumes:
+  homepedia_pg:
+  homepedia_grafana:
+  homepedia_mongo:

@@ -1,0 +1,22 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Dépendances du dashboard uniquement (profil démo léger — pas de Spark/Kafka/Hive)
+RUN pip install --no-cache-dir \
+    "streamlit>=1.32.0" "pandas>=2.2.0" "numpy" "pyarrow>=15.0.0" \
+    "plotly>=5.19.0" "requests>=2.31.0" "scikit-learn>=1.4.0" \
+    "wordcloud>=1.9.0" "beautifulsoup4>=4.12.0" "sqlalchemy>=2.0.0" \
+    "psycopg2-binary>=2.9.9"
+
+COPY data_pipeline/ data_pipeline/
+COPY dashboard/ dashboard/
+COPY database/ database/
+COPY deploy/prepare_demo_data.py deploy/prepare_demo_data.py
+
+# Génère les données de démonstration (territoires, historique, IA, NLP)
+RUN python deploy/prepare_demo_data.py
+
+EXPOSE 8501
+CMD ["python", "-m", "streamlit", "run", "dashboard/streamlit/app.py", \
+     "--server.headless", "true", "--server.port", "8501", "--server.address", "0.0.0.0"]
