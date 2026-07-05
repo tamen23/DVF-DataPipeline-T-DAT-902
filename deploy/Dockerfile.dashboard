@@ -13,6 +13,7 @@ COPY data_pipeline/ data_pipeline/
 COPY dashboard/ dashboard/
 COPY database/ database/
 COPY deploy/prepare_demo_data.py deploy/prepare_demo_data.py
+COPY deploy/load_demo_prices.py deploy/load_demo_prices.py
 
 # Génère les données de démonstration (territoires, historique, IA, NLP)
 RUN python deploy/prepare_demo_data.py

@@ -54,7 +54,8 @@ services:
       DATABASE_URL: postgresql://homepedia:homepedia@postgres:5432/homepedia
     command: >
       sh -c "python -m data_pipeline.ingestion.ingest_communes &&
-             python -m data_pipeline.export.load_postgres --year 2023 --skip-transactions"
+             python -m data_pipeline.export.load_postgres --year 2023 --skip-transactions &&
+             python deploy/load_demo_prices.py"
     restart: "no"
 
   grafana:
@@ -68,6 +69,8 @@ services:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: homepedia
       GF_USERS_ALLOW_SIGN_UP: "false"
+      # Atterrissage direct sur le dashboard HOMEPEDIA au login
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/homepedia.json
     ports:
       - "3002:3000"
     volumes:
