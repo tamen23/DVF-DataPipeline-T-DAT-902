@@ -150,6 +150,12 @@ Start the Streamlit dashboard (reads the API, falls back to local parquet):
 HOMEPEDIA_API_URL=http://localhost:8000 python -m streamlit run dashboard/streamlit/app.py
 ```
 
+Open the BI dashboards (Grafana, auto-provisioned over PostgreSQL):
+
+```text
+http://localhost:3000  (admin / homepedia) — folder HOMEPEDIA
+```
+
 ## Data Lake Layers
 
 - `raw`: original files, unchanged
@@ -169,4 +175,7 @@ HOMEPEDIA_API_URL=http://localhost:8000 python -m streamlit run dashboard/stream
 - dbt models (staging → marts) running on the loaded Postgres
 - FastAPI over Hive (parameterized queries, /territories bulk endpoint)
 - Streamlit dashboard reading the API with local-parquet fallback
-- BI documentation (docs/powerbi_views.md)
+- Grafana BI dashboards auto-provisioned over PostgreSQL (Power BI views
+  remain documented in docs/powerbi_views.md as an alternative)
+- CI on GitHub Actions: syntax checks, compose validation, dbt parse,
+  and a pipeline smoke test on the sample DVF file

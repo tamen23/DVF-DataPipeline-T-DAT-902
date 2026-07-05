@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+jobs:
+  python-checks:
+    name: Python syntax + compose validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Syntax-check all Python
+        run: python -m compileall -q data_pipeline backend dashboard airflow
+      - name: Validate docker-compose.yml
+        run: docker compose config --quiet
+
+  dbt-parse:
+    name: dbt models parse
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dbt
+        run: pip install --quiet "dbt-core>=1.7.0" "dbt-postgres>=1.7.0"
+      - name: Parse models (no database needed)
+        working-directory: dbt
+        run: |
+          cp profiles.yml.example profiles.yml
+          dbt parse --profiles-dir .
+
+  pipeline-smoke:
+    name: Pipeline smoke test (sample DVF)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pipeline dependencies
+        run: pip install --quiet "pandas>=2.2.0" "pyarrow>=15.0.0" "requests>=2.31.0"
+      - name: Ingest sample DVF
+        run: python -m data_pipeline.ingestion.ingest_dvf --input samples/dvf_demo_2022.csv --year 2022
+      - name: Bronze
+        run: python -m data_pipeline.transformation.bronze_dvf --year 2022
+      - name: Silver
+        run: python -m data_pipeline.cleaning.silver_dvf --year 2022
+      - name: Gold
+        run: python -m data_pipeline.transformation.gold_real_estate --year 2022

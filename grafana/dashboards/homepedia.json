@@ -1,0 +1,133 @@
+{
+  "uid": "homepedia-main",
+  "title": "HOMEPEDIA — Territoires & Immobilier",
+  "tags": ["homepedia"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "5m",
+  "time": { "from": "now-5y", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Communes référencées",
+      "gridPos": { "h": 5, "w": 4, "x": 0, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "homepedia-postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT COUNT(*) AS communes FROM communes;"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Transactions DVF chargées",
+      "gridPos": { "h": 5, "w": 4, "x": 4, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "homepedia-postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT COUNT(*) AS transactions FROM real_estate_transactions;"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Communes scorées",
+      "gridPos": { "h": 5, "w": 4, "x": 8, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "homepedia-postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT COUNT(*) AS scored FROM territorial_scores;"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Prix moyen national (€/m²)",
+      "gridPos": { "h": 5, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "homepedia-postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT ROUND(AVG(avg_price_m2)::numeric, 0) AS prix_m2 FROM mart_commune_real_estate;"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "Top communes — score global",
+      "gridPos": { "h": 11, "w": 12, "x": 0, "y": 5 },
+      "datasource": { "type": "postgres", "uid": "homepedia-postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT c.nom_commune AS commune, c.code_commune, t.global_score, t.real_estate_score, t.network_score, t.transport_score, t.socio_economic_score FROM territorial_scores t JOIN communes c ON c.id = t.commune_id ORDER BY t.global_score DESC NULLS LAST LIMIT 20;"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "Marché immobilier par commune (mart dbt)",
+      "gridPos": { "h": 11, "w": 12, "x": 12, "y": 5 },
+      "datasource": { "type": "postgres", "uid": "homepedia-postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT nom_commune AS commune, year, transaction_count, avg_price_m2, median_price_m2, avg_surface FROM mart_commune_real_estate ORDER BY avg_price_m2 DESC NULLS LAST LIMIT 20;"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "geomap",
+      "title": "Carte des communes (taille = population)",
+      "gridPos": { "h": 13, "w": 24, "x": 0, "y": 16 },
+      "datasource": { "type": "postgres", "uid": "homepedia-postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT latitude, longitude, nom_commune, population FROM communes WHERE latitude IS NOT NULL AND population IS NOT NULL ORDER BY population DESC LIMIT 2000;"
+        }
+      ],
+      "options": {
+        "view": { "id": "coords", "lat": 46.6, "lon": 2.4, "zoom": 5.2 },
+        "basemap": { "type": "osm-standard", "name": "OpenStreetMap" },
+        "layers": [
+          {
+            "type": "markers",
+            "name": "Communes",
+            "location": { "mode": "auto" },
+            "config": {
+              "style": {
+                "size": { "field": "population", "min": 2, "max": 18 },
+                "color": { "fixed": "orange" },
+                "opacity": 0.5
+              },
+              "showLegend": false
+            },
+            "tooltip": true
+          }
+        ]
+      }
+    }
+  ]
+}

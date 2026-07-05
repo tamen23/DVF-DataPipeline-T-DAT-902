@@ -22,7 +22,7 @@ docker exec -i homepedia-hive-server beeline -u jdbc:hive2://localhost:10000 -n 
 ```
 
 Ports: Hive 10000, Kafka 9092 (host) / kafka:29092 (containers), kafka-ui 8080,
-Airflow 8081, Postgres **5433** (5432 is often taken by a native install).
+Airflow 8081, Grafana 3000, Postgres **5433** (5432 is often taken by a native install).
 
 ## Full pipeline
 
@@ -114,6 +114,21 @@ dbt test --profiles-dir .
 ```bash
 uvicorn backend.app.main:app --reload
 # http://localhost:8000/docs
+```
+
+## Grafana (BI)
+
+```bash
+docker compose up -d grafana
+# http://localhost:3000 — admin / homepedia
+# Folder HOMEPEDIA: datasource + dashboard are auto-provisioned from ./grafana
+# Requires data in Postgres: python -m data_pipeline.export.load_postgres --year 2023
+```
+
+If the admin password is refused (pre-existing grafana_data volume):
+
+```bash
+docker exec homepedia-grafana grafana cli admin reset-admin-password homepedia
 ```
 
 ## Streamlit

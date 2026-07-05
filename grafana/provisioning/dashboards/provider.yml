@@ -1,0 +1,9 @@
+apiVersion: 1
+
+providers:
+  - name: homepedia
+    folder: HOMEPEDIA
+    type: file
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

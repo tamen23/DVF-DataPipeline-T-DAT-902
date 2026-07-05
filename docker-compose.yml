@@ -118,6 +118,26 @@ services:
       timeout: 5s
       retries: 5
 
+  # ── Grafana (BI dashboards over PostgreSQL) ─────────────────────
+  # Datasource + HOMEPEDIA dashboard auto-provisioned from ./grafana.
+  # UI: http://localhost:3000 (admin / homepedia)
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: homepedia-grafana
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: homepedia
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+
   # ── Airflow (orchestration) ─────────────────────────────────────
   # Dev-mode standalone instance: scheduler + webserver + SQLite metadata.
   # UI on http://localhost:8081 (admin password printed in the container
@@ -199,3 +219,4 @@ volumes:
   datanode_data:
   hive_metastore_data:
   postgres_data:
+  grafana_data:

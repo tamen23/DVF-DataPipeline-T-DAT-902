@@ -24,8 +24,8 @@ Open data (CSV/API)          Scrapers (SeLoger, LeBonCoin, CDC Habitat)
         +--> quality gate (check_gold: hard failures + warnings)
         |
         +--> HDFS upload + MSCK repair -> Hive external tables -> FastAPI -> Streamlit
-        |                                                      -> Power BI
-        +--> load_postgres -> PostgreSQL/PostGIS -> dbt marts  -> Power BI / psql
+        |
+        +--> load_postgres -> PostgreSQL/PostGIS -> dbt marts  -> Grafana / psql
 ```
 
 ## Components (all wired)
@@ -40,7 +40,8 @@ Open data (CSV/API)          Scrapers (SeLoger, LeBonCoin, CDC Habitat)
 - **Airflow** (docker-compose: airflow, UI on :8081): `homepedia_dvf_pipeline` DAG runs ingest → bronze → silver → gold → quality → load_postgres. `pipeline.sh`/`pipeline.bat` are the equivalent CLI orchestrators (they add the HDFS upload, which needs the host's docker CLI).
 - **FastAPI** (`backend/`): serves Hive data (parameterized HiveQL); `/territories` is the bulk endpoint for BI/dashboard.
 - **Streamlit** (`dashboard/`): reads the API when `HOMEPEDIA_API_URL` is set, falls back to local gold Parquet; live listings scraping on demand.
-- **Power BI**: connects to Hive views (`vw_ranking`, `vw_commune_full`) or Postgres/dbt marts — see `docs/powerbi_views.md`.
+- **Grafana** (docker-compose: grafana, UI on :3000): BI layer — datasource and the HOMEPEDIA dashboard (KPIs, top communes, geomap) auto-provisioned from `grafana/`. Power BI remains a documented alternative over the same Hive views / Postgres marts (`docs/powerbi_views.md`).
+- **CI** (`.github/workflows/ci.yml`): Python syntax checks, compose validation, dbt parse, pipeline smoke test on the sample DVF.
 
 ## Design notes
 
