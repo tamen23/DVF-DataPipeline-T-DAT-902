@@ -1,0 +1,139 @@
+{
+  "uid": "homepedia-monitoring",
+  "title": "HOMEPEDIA — Monitoring du pipeline",
+  "tags": ["homepedia", "monitoring"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "1m",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Communes (référentiel)",
+      "gridPos": { "h": 5, "w": 4, "x": 0, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "homepedia-postgres" },
+      "targets": [{ "refId": "A", "format": "table", "rawSql": "SELECT COUNT(*) FROM communes;" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Marché (mart)",
+      "gridPos": { "h": 5, "w": 4, "x": 4, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "homepedia-postgres" },
+      "targets": [{ "refId": "A", "format": "table", "rawSql": "SELECT COUNT(*) FROM mart_commune_real_estate;" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Prédictions IA",
+      "gridPos": { "h": 5, "w": 4, "x": 8, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "homepedia-postgres" },
+      "targets": [{ "refId": "A", "format": "table", "rawSql": "SELECT COUNT(*) FROM price_predictions;" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Analyses NLP",
+      "gridPos": { "h": 5, "w": 4, "x": 12, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "homepedia-postgres" },
+      "targets": [{ "refId": "A", "format": "table", "rawSql": "SELECT COUNT(*) FROM nlp_sentiment;" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Scores territoriaux",
+      "gridPos": { "h": 5, "w": 4, "x": 16, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "homepedia-postgres" },
+      "targets": [{ "refId": "A", "format": "table", "rawSql": "SELECT COUNT(*) FROM territorial_scores;" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Taille de la base",
+      "gridPos": { "h": 5, "w": 4, "x": 20, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "homepedia-postgres" },
+      "targets": [{ "refId": "A", "format": "table", "rawSql": "SELECT pg_database_size('homepedia');" }],
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 10,
+      "type": "table",
+      "title": "Volumétrie et fraîcheur des tables",
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 5 },
+      "datasource": { "type": "postgres", "uid": "homepedia-postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT relname AS \"Table\", n_live_tup AS \"Lignes\", pg_total_relation_size(relid) AS \"Taille\" FROM pg_stat_user_tables ORDER BY pg_total_relation_size(relid) DESC LIMIT 15;"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Taille" }, "properties": [{ "id": "unit", "value": "bytes" }] }
+        ]
+      }
+    },
+    {
+      "id": 11,
+      "type": "table",
+      "title": "Couverture du marché par année (complétude du lake)",
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 5 },
+      "datasource": { "type": "postgres", "uid": "homepedia-postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT year AS \"Année\", COUNT(*) AS \"Communes couvertes\", ROUND(AVG(transaction_count)::numeric) AS \"Transactions moy.\", ROUND(AVG(avg_price_m2)::numeric) AS \"Prix moyen €/m²\" FROM mart_commune_real_estate GROUP BY year ORDER BY year;"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "table",
+      "title": "Qualité : communes du mart absentes du référentiel (codes orphelins)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+      "datasource": { "type": "postgres", "uid": "homepedia-postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT m.code_commune AS \"Code orphelin\", m.nom_commune AS \"Nom\", COUNT(*) AS \"Lignes\" FROM mart_commune_real_estate m LEFT JOIN communes c ON c.code_commune = m.code_commune WHERE c.id IS NULL GROUP BY 1, 2 ORDER BY 3 DESC LIMIT 15;"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "stat",
+      "title": "Complétude géocodage (communes avec lat/lon)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
+      "datasource": { "type": "postgres", "uid": "homepedia-postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT ROUND(100.0 * COUNT(*) FILTER (WHERE latitude IS NOT NULL) / NULLIF(COUNT(*), 0), 1) FROM communes;"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent", "min": 0, "max": 100,
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null },
+            { "color": "yellow", "value": 90 },
+            { "color": "green", "value": 98 }
+          ] }
+        }, "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    }
+  ]
+}

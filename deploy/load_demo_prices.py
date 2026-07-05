@@ -39,3 +39,17 @@ mart["population"] = pd.NA
 engine = create_engine(DATABASE_URL)
 mart.to_sql("mart_commune_real_estate", engine, if_exists="replace", index=False)
 print(f"mart_commune_real_estate: {len(mart):,} lignes ({history['year'].min()}-{history['year'].max()})")
+
+# Prédictions IA -> table price_predictions (panneau Grafana Prédictions)
+pred_files = sorted((ROOT / "data_lake" / "gold" / "ml").glob("price_predictions_*.parquet"))
+if pred_files:
+    predictions = pd.read_parquet(pred_files[-1])
+    predictions.to_sql("price_predictions", engine, if_exists="replace", index=False)
+    print(f"price_predictions: {len(predictions):,} lignes")
+
+# Analyse textuelle -> table nlp_sentiment (panneau Grafana Sentiment)
+nlp_path = ROOT / "data_lake" / "gold" / "nlp" / "text_analysis.parquet"
+if nlp_path.exists():
+    nlp = pd.read_parquet(nlp_path)[["code_commune", "n_texts", "sentiment_score", "sentiment_label"]]
+    nlp.to_sql("nlp_sentiment", engine, if_exists="replace", index=False)
+    print(f"nlp_sentiment: {len(nlp):,} lignes")

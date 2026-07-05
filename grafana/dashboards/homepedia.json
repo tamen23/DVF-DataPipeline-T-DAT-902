@@ -5,7 +5,31 @@
   "timezone": "browser",
   "schemaVersion": 39,
   "refresh": "5m",
-  "time": { "from": "now-5y", "to": "now" },
+  "time": { "from": "2019-01-01T00:00:00Z", "to": "2024-01-01T00:00:00Z" },
+  "links": [
+    {
+      "title": "🏦 Ouvrir l'application HOMEPEDIA",
+      "type": "link",
+      "url": "http://74.208.33.89:8501",
+      "targetBlank": true,
+      "icon": "external link"
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "region",
+        "label": "Région",
+        "type": "query",
+        "datasource": { "type": "postgres", "uid": "homepedia-postgres" },
+        "query": "SELECT nom_region FROM regions ORDER BY 1",
+        "includeAll": true,
+        "allValue": "%",
+        "multi": false,
+        "refresh": 1
+      }
+    ]
+  },
   "panels": [
     {
       "id": 1,
@@ -14,92 +38,231 @@
       "gridPos": { "h": 5, "w": 4, "x": 0, "y": 0 },
       "datasource": { "type": "postgres", "uid": "homepedia-postgres" },
       "targets": [
-        {
-          "refId": "A",
-          "format": "table",
-          "rawSql": "SELECT COUNT(*) AS communes FROM communes;"
-        }
+        { "refId": "A", "format": "table", "rawSql": "SELECT COUNT(*) AS communes FROM communes;" }
       ],
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
     },
     {
       "id": 2,
       "type": "stat",
-      "title": "Transactions DVF chargées",
+      "title": "Lignes de marché (commune × année)",
       "gridPos": { "h": 5, "w": 4, "x": 4, "y": 0 },
       "datasource": { "type": "postgres", "uid": "homepedia-postgres" },
       "targets": [
-        {
-          "refId": "A",
-          "format": "table",
-          "rawSql": "SELECT COUNT(*) AS transactions FROM real_estate_transactions;"
-        }
+        { "refId": "A", "format": "table", "rawSql": "SELECT COUNT(*) FROM mart_commune_real_estate;" }
       ],
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
     },
     {
       "id": 3,
       "type": "stat",
-      "title": "Communes scorées",
+      "title": "Prix moyen national (€/m²)",
       "gridPos": { "h": 5, "w": 4, "x": 8, "y": 0 },
       "datasource": { "type": "postgres", "uid": "homepedia-postgres" },
       "targets": [
-        {
-          "refId": "A",
-          "format": "table",
-          "rawSql": "SELECT COUNT(*) AS scored FROM territorial_scores;"
-        }
+        { "refId": "A", "format": "table", "rawSql": "SELECT ROUND(AVG(avg_price_m2)::numeric, 0) FROM mart_commune_real_estate WHERE year = (SELECT MAX(year) FROM mart_commune_real_estate);" }
       ],
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
     },
     {
       "id": 4,
       "type": "stat",
-      "title": "Prix moyen national (€/m²)",
-      "gridPos": { "h": 5, "w": 12, "x": 12, "y": 0 },
+      "title": "Croissance moyenne prédite 2026 (IA)",
+      "gridPos": { "h": 5, "w": 4, "x": 12, "y": 0 },
       "datasource": { "type": "postgres", "uid": "homepedia-postgres" },
       "targets": [
-        {
-          "refId": "A",
-          "format": "table",
-          "rawSql": "SELECT ROUND(AVG(avg_price_m2)::numeric, 0) AS prix_m2 FROM mart_commune_real_estate;"
-        }
+        { "refId": "A", "format": "table", "rawSql": "SELECT ROUND(AVG(predicted_growth_pct)::numeric, 1) FROM price_predictions;" }
       ],
+      "fieldConfig": { "defaults": { "unit": "percent", "color": { "mode": "fixed", "fixedColor": "orange" } }, "overrides": [] },
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
     },
     {
       "id": 5,
-      "type": "table",
-      "title": "Top communes — score global",
-      "gridPos": { "h": 11, "w": 12, "x": 0, "y": 5 },
+      "type": "stat",
+      "title": "Sentiment moyen des annonces",
+      "gridPos": { "h": 5, "w": 4, "x": 16, "y": 0 },
       "datasource": { "type": "postgres", "uid": "homepedia-postgres" },
       "targets": [
-        {
-          "refId": "A",
-          "format": "table",
-          "rawSql": "SELECT c.nom_commune AS commune, c.code_commune, t.global_score, t.real_estate_score, t.network_score, t.transport_score, t.socio_economic_score FROM territorial_scores t JOIN communes c ON c.id = t.commune_id ORDER BY t.global_score DESC NULLS LAST LIMIT 20;"
-        }
-      ]
+        { "refId": "A", "format": "table", "rawSql": "SELECT ROUND(AVG(sentiment_score)::numeric, 2) FROM nlp_sentiment;" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": -1, "max": 1,
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null },
+            { "color": "yellow", "value": -0.15 },
+            { "color": "green", "value": 0.15 }
+          ] }
+        }, "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
     },
     {
       "id": 6,
-      "type": "table",
-      "title": "Marché immobilier par commune (mart dbt)",
-      "gridPos": { "h": 11, "w": 12, "x": 12, "y": 5 },
+      "type": "stat",
+      "title": "Communes scorées",
+      "gridPos": { "h": 5, "w": 4, "x": 20, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "homepedia-postgres" },
+      "targets": [
+        { "refId": "A", "format": "table", "rawSql": "SELECT COUNT(*) FROM territorial_scores;" }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "📈 Évolution du prix moyen au m² — $region",
+      "gridPos": { "h": 10, "w": 14, "x": 0, "y": 5 },
+      "datasource": { "type": "postgres", "uid": "homepedia-postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "SELECT make_date(m.year::int, 1, 1) AS time, ROUND(AVG(m.avg_price_m2)::numeric) AS \"Prix moyen (€/m²)\" FROM mart_commune_real_estate m JOIN communes c ON c.code_commune = m.code_commune JOIN departements d ON d.id = c.departement_id JOIN regions r ON r.id = d.region_id WHERE r.nom_region LIKE '$region' GROUP BY 1 ORDER BY 1;"
+        },
+        {
+          "refId": "B",
+          "format": "time_series",
+          "rawSql": "SELECT make_date(m.year::int, 1, 1) AS time, ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY m.avg_price_m2)::numeric) AS \"Prix médian (€/m²)\" FROM mart_commune_real_estate m JOIN communes c ON c.code_commune = m.code_commune JOIN departements d ON d.id = c.departement_id JOIN regions r ON r.id = d.region_id WHERE r.nom_region LIKE '$region' GROUP BY 1 ORDER BY 1;"
+        }
+      ],
+      "fieldConfig": { "defaults": { "custom": { "lineWidth": 2, "fillOpacity": 12, "pointSize": 7, "showPoints": "always" }, "unit": "currencyEUR" }, "overrides": [] }
+    },
+    {
+      "id": 11,
+      "type": "bargauge",
+      "title": "🏆 Prix moyen par département — $region",
+      "gridPos": { "h": 10, "w": 10, "x": 14, "y": 5 },
       "datasource": { "type": "postgres", "uid": "homepedia-postgres" },
       "targets": [
         {
           "refId": "A",
           "format": "table",
-          "rawSql": "SELECT nom_commune AS commune, year, transaction_count, avg_price_m2, median_price_m2, avg_surface FROM mart_commune_real_estate ORDER BY avg_price_m2 DESC NULLS LAST LIMIT 20;"
+          "rawSql": "SELECT d.nom_departement AS \"Département\", ROUND(AVG(m.avg_price_m2)::numeric) AS \"Prix €/m²\" FROM mart_commune_real_estate m JOIN communes c ON c.code_commune = m.code_commune JOIN departements d ON d.id = c.departement_id JOIN regions r ON r.id = d.region_id WHERE r.nom_region LIKE '$region' AND m.year = (SELECT MAX(year) FROM mart_commune_real_estate) GROUP BY 1 ORDER BY 2 DESC LIMIT 12;"
+        }
+      ],
+      "options": { "displayMode": "gradient", "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/Prix/" } },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyEUR", "min": 0,
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 3000 },
+            { "color": "orange", "value": 5000 },
+            { "color": "red", "value": 8000 }
+          ] }
+        }, "overrides": []
+      }
+    },
+    {
+      "id": 12,
+      "type": "table",
+      "title": "🤖 Prédictions IA 2026 — top croissances (RandomForest sur historique DVF)",
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 15 },
+      "datasource": { "type": "postgres", "uid": "homepedia-postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT nom_commune AS \"Commune\", ROUND(last_avg_price_m2::numeric) AS \"Prix actuel €/m²\", ROUND(predicted_avg_price_m2::numeric) AS \"Prix estimé 2026 €/m²\", predicted_growth_pct AS \"Croissance prédite %\" FROM price_predictions ORDER BY predicted_growth_pct DESC LIMIT 15;"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Croissance prédite %" },
+            "properties": [
+              { "id": "unit", "value": "percent" },
+              { "id": "custom.cellOptions", "value": { "type": "color-background" } },
+              { "id": "thresholds", "value": { "mode": "absolute", "steps": [
+                { "color": "red", "value": null },
+                { "color": "yellow", "value": 0 },
+                { "color": "green", "value": 8 }
+              ] } }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 13,
+      "type": "table",
+      "title": "💬 Sentiment des annonces par commune (NLP lexical FR)",
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 15 },
+      "datasource": { "type": "postgres", "uid": "homepedia-postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT COALESCE(c.nom_commune, n.code_commune) AS \"Commune\", n.sentiment_label AS \"Sentiment\", n.sentiment_score AS \"Score (-1..+1)\", n.n_texts AS \"Textes analysés\" FROM nlp_sentiment n LEFT JOIN communes c ON c.code_commune = n.code_commune ORDER BY n.sentiment_score DESC;"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Score (-1..+1)" },
+            "properties": [
+              { "id": "custom.cellOptions", "value": { "type": "color-background" } },
+              { "id": "min", "value": -1 },
+              { "id": "max", "value": 1 },
+              { "id": "thresholds", "value": { "mode": "absolute", "steps": [
+                { "color": "red", "value": null },
+                { "color": "yellow", "value": -0.15 },
+                { "color": "green", "value": 0.15 }
+              ] } }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 14,
+      "type": "table",
+      "title": "Top communes — score global",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 25 },
+      "datasource": { "type": "postgres", "uid": "homepedia-postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT c.nom_commune AS \"Commune\", c.code_commune, t.global_score AS \"Score global\", t.real_estate_score AS \"Immobilier\", t.network_score AS \"Réseau\", t.transport_score AS \"Transport\" FROM territorial_scores t JOIN communes c ON c.id = t.commune_id ORDER BY t.global_score DESC NULLS LAST LIMIT 20;"
         }
       ]
     },
     {
-      "id": 7,
+      "id": 15,
+      "type": "geomap",
+      "title": "🌡️ Heatmap des prix au m² (dernière année)",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 25 },
+      "datasource": { "type": "postgres", "uid": "homepedia-postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT c.latitude, c.longitude, ROUND(m.avg_price_m2::numeric) AS prix_m2 FROM mart_commune_real_estate m JOIN communes c ON c.code_commune = m.code_commune WHERE m.year = (SELECT MAX(year) FROM mart_commune_real_estate) AND c.latitude IS NOT NULL LIMIT 3000;"
+        }
+      ],
+      "options": {
+        "view": { "id": "coords", "lat": 46.6, "lon": 2.4, "zoom": 5 },
+        "basemap": { "type": "osm-standard", "name": "OpenStreetMap" },
+        "layers": [
+          {
+            "type": "heatmap",
+            "name": "Prix €/m²",
+            "location": { "mode": "auto" },
+            "config": { "weight": { "field": "prix_m2", "fixed": 1 }, "radius": 18, "blur": 20 },
+            "tooltip": true
+          }
+        ]
+      }
+    },
+    {
+      "id": 16,
       "type": "geomap",
       "title": "Carte des communes (taille = population)",
-      "gridPos": { "h": 13, "w": 24, "x": 0, "y": 16 },
+      "gridPos": { "h": 11, "w": 24, "x": 0, "y": 34 },
       "datasource": { "type": "postgres", "uid": "homepedia-postgres" },
       "targets": [
         {
