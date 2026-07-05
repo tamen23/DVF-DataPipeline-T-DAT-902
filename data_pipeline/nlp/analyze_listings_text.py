@@ -96,7 +96,8 @@ def _load_texts_per_commune() -> dict[str, list[str]]:
     # 1. Annonces du pipeline Kafka
     for path in sorted((DATA_LAKE_PATH / "bronze" / "listings").glob("*/*/batch_*.parquet")):
         frame = pd.read_parquet(path)
-        text_cols = [c for c in ("title", "description", "city") if c in frame.columns]
+        # Pas la colonne "city" : le nom de la commune dominerait le nuage de mots.
+        text_cols = [c for c in ("title", "description") if c in frame.columns]
         code_col = "commune_code" if "commune_code" in frame.columns else None
         if not text_cols or code_col is None:
             continue

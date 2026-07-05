@@ -476,19 +476,6 @@ if predictions is not None and "code_commune" in data.columns:
         on="code_commune", how="left",
     )
 
-# ── HEADER ────────────────────────────────────────────────────────────────────
-st.markdown("## 🏦 HOMEPEDIA — Trouvez où investir en France")
-st.markdown(
-    '<div style="background:#1E3A5F;border-radius:8px;padding:12px 20px;margin-bottom:16px">'
-    '<b style="color:#90CAF9">Comment ça marche en 3 étapes :</b><br>'
-    '<span style="color:#E3F2FD">'
-    '&nbsp;&nbsp;<b>① Profil</b> — Renseignez votre apport + salaire dans la sidebar à gauche &nbsp;·&nbsp; '
-    '<b>② Explorez</b> — La carte et le tableau se mettent à jour en temps réel &nbsp;·&nbsp; '
-    '<b>③ Simulez</b> — Cliquez une commune dans le tableau pour voir le plan sur 20 ans'
-    '</span></div>',
-    unsafe_allow_html=True,
-)
-
 # ── SIDEBAR : Profil investisseur ─────────────────────────────────────────────
 st.sidebar.title("🏦 Mon profil investisseur")
 
@@ -698,7 +685,7 @@ mensualite_assur_val = capacite_emprunt * mensualite_assur_ratio
 mensualite_totale_val = mensualite_credit_val + mensualite_assur_val
 
 # ── TITRE ──────────────────────────────────────────────────────────────────────
-st.title("🏦 HOMEPEDIA — Stratégie investisseur")
+st.title("🏦 HOMEPEDIA — Où investir en France ?")
 
 if not mode_expert:
     st.info(
@@ -709,10 +696,11 @@ if not mode_expert:
         "3️⃣ **Cliquez sur une commune** dans le tableau pour voir son profil complet et simuler votre investissement sur 20 ans  \n\n"
         "💡 *L'objectif : trouver un appartement dont le loyer couvre entièrement votre mensualité de crédit — vous constituez un patrimoine sans effort.*"
     )
-st.markdown(
-    "**Objectif :** trouver un appartement dont le loyer couvre entièrement la mensualité du crédit "
-    "— et simuler le chemin vers votre 2ème achat."
-)
+else:
+    st.markdown(
+        "**Objectif :** trouver un appartement dont le loyer couvre entièrement la mensualité du crédit "
+        "— et simuler le chemin vers votre 2ème achat."
+    )
 
 # ── BLOC CAPACITÉ ──────────────────────────────────────────────────────────────
 st.subheader("Étape 1 — Votre capacité d'emprunt")
@@ -723,7 +711,7 @@ c2.metric("Prix max du bien", format_eur(prix_max_bien),
 c3.metric("Mensualité max (33%)", format_eur(mensualite_max))
 c4.metric("Mensualité réelle", format_eur(mensualite_totale_val),
           delta=f"dont assurance {mensualite_assur_val:.0f} €", delta_color="off")
-c5.metric("Taux retenu", f"{taux_base}% sur {duree} ans")
+c5.metric("Taux retenu", f"{taux_base}%", delta=f"sur {duree} ans", delta_color="off")
 
 st.info(
     f"Avec **{format_eur(salaire_net)}/mois** de salaire, votre mensualité max est "
@@ -1345,7 +1333,7 @@ else:
         with col_radar:
             st.markdown("**Profil qualité de vie**")
             st.markdown(f"📍 *{radar_commune}*")
-            st.caption("💡 Cochez 2 lignes pour comparer deux communes")
+            st.caption("💡 Pour comparer plusieurs communes : section ⚖️ Comparateur en bas de page")
             st.plotly_chart(build_radar(radar_row, radar_commune), use_container_width=True, key="radar_top10")
 
 st.divider()
@@ -1488,7 +1476,7 @@ with sim_col2:
         help=f"Loyer × (1 − {taux_vacance_pct}% vacance) − crédit − charges − impôts",
     )
     r2.metric(f"Patrimoine net à {duree_simulation} ans", format_eur(sim["patrimoine_net"][-1]))
-    r3.metric(f"Biens acquis en {duree_simulation} ans", f"{1 + nb_achats} biens",
+    r3.metric(f"Biens acquis en {duree_simulation} ans", f"{1 + nb_achats} bien{'s' if nb_achats else ''}",
               delta=f"+{nb_achats} via cash-flow" if nb_achats else "1 seul bien", delta_color="off")
     taux_endt_initial = sim["taux_endettement"][0] if sim["taux_endettement"] else 0
     r4.metric(
@@ -2106,12 +2094,12 @@ st.subheader("🗺️ Analyse par territoire")
 tab_region, tab_dept_view, tab_choro = st.tabs(["Par région", "Par département", "Carte des prix"])
 
 with tab_region:
-    if "region" in data.columns and data["region"].notna().any():
-        _reg = data.groupby("region").agg(
+    if "region" in df_all.columns and df_all["region"].notna().any():
+        _reg = df_all.groupby("region").agg(
             communes=("code_commune", "nunique"),
             population=("population", "sum"),
             prix_m2_moyen=("avg_price_m2", "mean"),
-            score_qualite=("critere_score", "mean") if "critere_score" in data.columns else ("avg_price_m2", "size"),
+            score_qualite=("critere_score", "mean"),
         ).sort_values("prix_m2_moyen", ascending=False).reset_index()
         _reg_display = _reg.copy()
         _reg_display["population"] = _reg_display["population"].map(lambda x: f"{x:,.0f}".replace(",", " "))
@@ -2130,7 +2118,7 @@ with tab_region:
         st.caption("Pas de colonne région dans les données chargées.")
 
 with tab_dept_view:
-    _dep = data.dropna(subset=["code_departement"]).groupby("code_departement").agg(
+    _dep = df_all.dropna(subset=["code_departement"]).groupby("code_departement").agg(
         communes=("code_commune", "nunique"),
         population=("population", "sum"),
         prix_m2_moyen=("avg_price_m2", "mean"),
