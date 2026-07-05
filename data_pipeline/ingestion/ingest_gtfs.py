@@ -21,8 +21,10 @@ import requests
 
 from data_pipeline.settings import file_path
 
-# National stops database — updated monthly by transport.data.gouv.fr
-BNLCA_URL = "https://transport.data.gouv.fr/resources/7186/download"
+# Base Nationale des Lieux et Arrêts (BNLCA) — transport.data.gouv.fr
+# Dataset: https://transport.data.gouv.fr/datasets/base-nationale-des-lieux-et-arrets
+# Le fichier CSV direct est publié sur data.gouv.fr
+BNLCA_URL = "https://www.data.gouv.fr/fr/datasets/r/0d6e5001-8b0a-42f9-b487-57b5de3b5021"
 
 CHUNK_SIZE = 4 * 1024 * 1024
 
