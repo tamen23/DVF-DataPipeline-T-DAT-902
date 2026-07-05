@@ -917,9 +917,18 @@ with st.expander("🔽 Filtres avancés", expanded=False):
     fc1, fc2, fc3 = st.columns(3)
     fc4, fc5, fc6 = st.columns(3)
 
+    # Bornes dérivées des données : quand le pool filtré n'a qu'une commune
+    # (ou des valeurs identiques/NaN), min == max ferait planter st.slider —
+    # on élargit alors la borne haute d'un pas.
+    _has_cf = not _pool.empty and _pool["cashflow_net_fiscal"].notna().any()
+    _has_rdt = not _pool.empty and _pool["rendement_net_fiscal"].notna().any()
+    _has_prix = not _pool.empty and _pool["prix_bien_possible"].notna().any()
+
     with fc1:
-        _cf_min_val = int(_pool["cashflow_net_fiscal"].min()) if not _pool.empty else -1000
-        _cf_max_val = int(_pool["cashflow_net_fiscal"].max()) if not _pool.empty else 1000
+        _cf_min_val = int(_pool["cashflow_net_fiscal"].min()) if _has_cf else -1000
+        _cf_max_val = int(_pool["cashflow_net_fiscal"].max()) if _has_cf else 1000
+        if _cf_max_val <= _cf_min_val:
+            _cf_max_val = _cf_min_val + 10
         _cf_filter_min = st.slider(
             "💰 Cash-flow net minimum (€/mois)",
             min_value=_cf_min_val, max_value=_cf_max_val,
@@ -928,18 +937,22 @@ with st.expander("🔽 Filtres avancés", expanded=False):
         )
 
     with fc2:
-        _rdt_min = float(_pool["rendement_net_fiscal"].min()) if not _pool.empty else 0.0
-        _rdt_max = float(_pool["rendement_net_fiscal"].max()) if not _pool.empty else 15.0
+        _rdt_min = round(float(_pool["rendement_net_fiscal"].min()), 1) if _has_rdt else 0.0
+        _rdt_max = round(float(_pool["rendement_net_fiscal"].max()), 1) if _has_rdt else 15.0
+        if _rdt_max <= _rdt_min:
+            _rdt_max = _rdt_min + 0.1
         _rdt_filter_min = st.slider(
             "📈 Rendement net minimum (%)",
-            min_value=round(_rdt_min, 1), max_value=round(_rdt_max, 1),
-            value=round(_rdt_min, 1), step=0.1,
+            min_value=_rdt_min, max_value=_rdt_max,
+            value=_rdt_min, step=0.1,
             help="Ex : mettre à 5% pour ne voir que les communes avec rendement net ≥ 5%",
         )
 
     with fc3:
-        _prix_min_val = int(_pool["prix_bien_possible"].min()) if not _pool.empty else 0
-        _prix_max_val = int(_pool["prix_bien_possible"].max()) if not _pool.empty else 500_000
+        _prix_min_val = int(_pool["prix_bien_possible"].min()) if _has_prix else 0
+        _prix_max_val = int(_pool["prix_bien_possible"].max()) if _has_prix else 500_000
+        if _prix_max_val <= _prix_min_val:
+            _prix_max_val = _prix_min_val + 1_000
         _prix_range = st.slider(
             f"🏠 Budget ({surface}m²) (€)",
             min_value=_prix_min_val, max_value=_prix_max_val,
