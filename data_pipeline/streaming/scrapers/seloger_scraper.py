@@ -99,10 +99,13 @@ class SelogerScraper(BaseScraper):
         """
         location: INSEE commune code (e.g. '75056' for Paris)
         """
+        page_success = False
+        last_error = None
         for page in range(1, pages + 1):
             url = self._build_url(location, page)
             try:
                 response = self._get(url)
+                page_success = True
                 raw_listings = self._parse_next_data(response.text)
                 if not raw_listings:
                     raw_listings = self._parse_jsonld(response.text)
@@ -120,5 +123,8 @@ class SelogerScraper(BaseScraper):
                     break  # no more results
 
             except Exception as e:
+                last_error = e
                 print(f"  [warn] SeLoger page {page} failed: {e}")
                 continue
+        if not page_success and last_error:
+            raise RuntimeError(f"SeLoger inaccessible: {last_error}")

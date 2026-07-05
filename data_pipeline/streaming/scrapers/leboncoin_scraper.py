@@ -71,6 +71,8 @@ class LeboncoinScraper(BaseScraper):
         location: postal code (e.g. '75001') or INSEE code
         LeBonCoin API uses postal codes, not INSEE codes.
         """
+        page_success = False
+        last_error = None
         for page in range(1, pages + 1):
             try:
                 response = self.session.post(
@@ -89,8 +91,10 @@ class LeboncoinScraper(BaseScraper):
 
                 if response.status_code != 200:
                     print(f"  [warn] LeBonCoin API returned {response.status_code}")
+                    last_error = RuntimeError(f"HTTP {response.status_code}")
                     break
 
+                page_success = True
                 data = response.json()
                 ads = data.get("ads", [])
 
@@ -107,5 +111,8 @@ class LeboncoinScraper(BaseScraper):
                     break  # last page
 
             except Exception as e:
+                last_error = e
                 print(f"  [warn] LeBonCoin page {page} failed: {e}")
                 continue
+        if not page_success and last_error:
+            raise RuntimeError(f"LeBonCoin inaccessible: {last_error}")
