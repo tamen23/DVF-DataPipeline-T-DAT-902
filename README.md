@@ -184,5 +184,9 @@ http://localhost:3000  (admin / homepedia) — folder HOMEPEDIA
 - analyse textuelle : sentiment FR + nuage de mots par commune calculés
   sur les textes d'annonces scrapées (data_pipeline/nlp)
 - MongoDB : archivage non-relationnel du JSON brut des annonces Kafka
+- dashboard multi-niveaux : sélecteur de persona (étudiant, jeune actif,
+  famille, personne âgée, investisseur), historique de prix + prédiction,
+  comparateur de communes, agrégats région/département, choroplèthe des
+  prix, écart prix annonces vs ventes DVF
 - CI on GitHub Actions: syntax checks, compose validation, dbt parse,
   and a pipeline smoke test on the sample DVF file

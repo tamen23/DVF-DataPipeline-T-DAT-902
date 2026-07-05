@@ -43,6 +43,53 @@ def load_predictions() -> pd.DataFrame | None:
 
 
 @st.cache_data
+def load_price_history() -> pd.DataFrame | None:
+    """Historique gold DVF multi-années : une ligne par commune et par an."""
+    frames = []
+    for path in sorted((DATA_LAKE / "real_estate").glob("*/real_estate_commune_*.parquet")):
+        try:
+            year = int(path.parent.name)
+        except ValueError:
+            continue
+        frame = pd.read_parquet(path, columns=["code_commune", "avg_price_m2", "transaction_count"])
+        if frame.empty:
+            continue
+        frame["annee"] = year
+        frames.append(frame)
+    if not frames:
+        return None
+    return pd.concat(frames, ignore_index=True)
+
+
+@st.cache_data
+def load_listing_stats() -> pd.DataFrame | None:
+    """Stats annonces silver (prix affiché du marché) agrégées toutes sources."""
+    files = sorted((PROJECT_ROOT / "data_lake" / "silver" / "listings").glob("source_name=*/*.parquet"))
+    if not files:
+        return None
+    listings = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
+    listings["_weighted"] = listings["avg_listing_price_m2"] * listings["listing_count"]
+    grouped = listings.groupby("code_commune").agg(
+        listing_count=("listing_count", "sum"), _weighted=("_weighted", "sum")
+    )
+    grouped["avg_listing_price_m2"] = grouped["_weighted"] / grouped["listing_count"]
+    return grouped.drop(columns="_weighted").reset_index()
+
+
+@st.cache_data
+def load_dept_geojson() -> dict | None:
+    """Contours des départements pour la choroplèthe (mis en cache par Streamlit)."""
+    try:
+        response = requests.get(
+            "https://france-geojson.gregoiredavid.fr/repo/departements.geojson", timeout=30
+        )
+        response.raise_for_status()
+        return response.json()
+    except Exception:
+        return None
+
+
+@st.cache_data
 def load_data() -> pd.DataFrame:
     if API_URL:
         try:
@@ -445,6 +492,25 @@ st.markdown(
 # ── SIDEBAR : Profil investisseur ─────────────────────────────────────────────
 st.sidebar.title("🏦 Mon profil investisseur")
 
+# ── Persona : re-pondère le score qualité de vie du classement ────────────────
+PERSONAS = {
+    "Investisseur": None,  # pondération manuelle par critères (comportement historique)
+    "Étudiant": "score_etudiant",
+    "Jeune actif": "score_jeune_actif",
+    "Famille": "score_famille",
+    "Personne âgée": "score_personne_agee",
+}
+persona_label = st.sidebar.selectbox(
+    "👤 Persona",
+    list(PERSONAS),
+    index=0,
+    help="Chaque persona pondère différemment les critères (santé, transport, éducation…) — "
+         "poids documentés dans docs/personas.md, scores précalculés dans le gold.",
+)
+persona_col = PERSONAS[persona_label]
+if persona_col:
+    st.sidebar.caption(f"Classement pondéré pour **{persona_label}**.")
+
 mode_expert = st.sidebar.toggle("Mode expert", value=False,
     help="Activez pour accéder à tous les paramètres. En mode débutant, les valeurs sont pré-remplies avec des hypothèses standards.")
 
@@ -770,6 +836,11 @@ df_all["critere_score"] = sum(
     (df_all[col] if col in df_all.columns else 50) * w / _total_w
     for col, w in _weights.items()
 )
+
+# Persona sélectionné : le score qualité de vie devient le score persona
+# précalculé dans le gold (pondérations de docs/personas.md).
+if persona_col and persona_col in df_all.columns:
+    df_all["critere_score"] = df_all[persona_col].fillna(50)
 
 # Filtre budget uniquement pour le tableau/ranking
 df = df_all[df_all["prix_bien_possible"] <= prix_max_bien * 1.1].copy()
@@ -1736,6 +1807,22 @@ with prof_col2:
         )
         kpi8.metric("Croissance prédite", f"{sim_row['predicted_growth_pct']:+.1f}%")
 
+    _lstats = load_listing_stats()
+    if _lstats is not None and pd.notna(sim_row.get("avg_price_m2")):
+        _lrow = _lstats[_lstats["code_commune"].astype(str) == str(sim_row.get("code_commune", ""))]
+        if not _lrow.empty:
+            _prix_annonces = float(_lrow.iloc[0]["avg_listing_price_m2"])
+            _ecart = (_prix_annonces - sim_row["avg_price_m2"]) / sim_row["avg_price_m2"] * 100
+            kpi9, kpi10 = st.columns(2)
+            kpi9.metric(
+                "Prix annonces (marché affiché)", f"{_prix_annonces:.0f} €/m²",
+                help="Moyenne des annonces scrapées (silver_listings), pondérée par le nombre d'annonces.",
+            )
+            kpi10.metric(
+                "Écart annonces vs ventes DVF", f"{_ecart:+.0f}%",
+                help="Écart entre le prix affiché sur les portails et les ventes réellement actées (DVF).",
+            )
+
     st.markdown("#### Annonces disponibles")
     code_commune = str(sim_row.get("code_commune", ""))
     dept = str(sim_row.get("code_departement", ""))
@@ -1936,3 +2023,141 @@ else:
                     st.image(_wc.to_array(), use_container_width=True)
             except ImportError:
                 st.caption("`pip install wordcloud` pour afficher le nuage de mots.")
+
+# ── ÉVOLUTION DU PRIX (historique DVF + prédiction IA) ────────────────────────
+_history = load_price_history()
+if _history is not None:
+    _hist_commune = _history[
+        _history["code_commune"].astype(str) == str(sim_row.get("code_commune", ""))
+    ].sort_values("annee")
+    if len(_hist_commune) >= 2:
+        st.markdown(f"#### 📈 Évolution du prix au m² — {sim_commune}")
+        fig_hist = go.Figure()
+        fig_hist.add_trace(go.Scatter(
+            x=_hist_commune["annee"], y=_hist_commune["avg_price_m2"],
+            mode="lines+markers", name="Prix DVF constaté",
+            line=dict(color="#1E88E5", width=3),
+        ))
+        if PREDICTION_YEAR and pd.notna(sim_row.get("predicted_avg_price_m2")):
+            _last = _hist_commune.iloc[-1]
+            fig_hist.add_trace(go.Scatter(
+                x=[_last["annee"], PREDICTION_YEAR],
+                y=[_last["avg_price_m2"], sim_row["predicted_avg_price_m2"]],
+                mode="lines+markers", name=f"Prédiction IA {PREDICTION_YEAR}",
+                line=dict(color="#FB8C00", width=2, dash="dash"),
+                marker=dict(symbol="diamond", size=10),
+            ))
+        fig_hist.update_layout(
+            height=340, margin=dict(l=10, r=10, t=10, b=10),
+            xaxis_title="Année", yaxis_title="Prix moyen (€/m²)",
+            legend=dict(orientation="h", y=1.1),
+        )
+        st.plotly_chart(fig_hist, use_container_width=True, key="price_history")
+        st.caption("Historique des ventes DVF (gold multi-années) ; en pointillé, la prédiction RandomForest.")
+
+# ── COMPARATEUR DE COMMUNES ────────────────────────────────────────────────────
+st.divider()
+st.subheader("⚖️ Comparateur de communes")
+_compare_choices = st.multiselect(
+    "Choisissez 2 à 4 communes à comparer",
+    sorted(data["nom_commune"].dropna().unique().tolist()),
+    max_selections=4,
+)
+if len(_compare_choices) >= 2:
+    _comp = data[data["nom_commune"].isin(_compare_choices)].drop_duplicates("nom_commune")
+
+    comp_col1, comp_col2 = st.columns([1.2, 1])
+    with comp_col1:
+        _comp_rows = {
+            "Prix/m² (DVF)": _comp["avg_price_m2"].map(lambda x: f"{x:,.0f} €".replace(",", " ") if pd.notna(x) else "N/A"),
+            "Population": _comp["population"].map(lambda x: f"{x:,.0f}".replace(",", " ") if pd.notna(x) else "N/A"),
+        }
+        if PREDICTION_YEAR and "predicted_avg_price_m2" in _comp.columns:
+            _comp_rows[f"Prix estimé {PREDICTION_YEAR} (IA)"] = _comp["predicted_avg_price_m2"].map(
+                lambda x: f"{x:,.0f} €".replace(",", " ") if pd.notna(x) else "N/A")
+        for _label, _col in CRITERIA_COLUMNS.items():
+            if _col in _comp.columns:
+                _comp_rows[_label] = _comp[_col].map(lambda x: f"{x:.0f}/100" if pd.notna(x) else "N/A")
+        if persona_col and persona_col in _comp.columns:
+            _comp_rows[f"Score {persona_label}"] = _comp[persona_col].map(
+                lambda x: f"{x:.0f}/100" if pd.notna(x) else "N/A")
+        st.dataframe(
+            pd.DataFrame(_comp_rows, index=_comp["nom_commune"]).T,
+            use_container_width=True,
+        )
+    with comp_col2:
+        fig_comp = go.Figure()
+        _axes = [label for label, col in CRITERIA_COLUMNS.items() if col in _comp.columns]
+        for _, _crow in _comp.iterrows():
+            fig_comp.add_trace(go.Scatterpolar(
+                r=[_crow.get(CRITERIA_COLUMNS[a], 0) or 0 for a in _axes],
+                theta=_axes, fill="toself", name=_crow["nom_commune"], opacity=0.55,
+            ))
+        fig_comp.update_layout(
+            polar=dict(radialaxis=dict(range=[0, 100], showticklabels=False)),
+            height=380, margin=dict(l=40, r=40, t=30, b=30),
+            legend=dict(orientation="h", y=-0.1),
+        )
+        st.plotly_chart(fig_comp, use_container_width=True, key="radar_compare")
+
+# ── ANALYSE PAR TERRITOIRE (région / département / carte) ─────────────────────
+st.divider()
+st.subheader("🗺️ Analyse par territoire")
+tab_region, tab_dept_view, tab_choro = st.tabs(["Par région", "Par département", "Carte des prix"])
+
+with tab_region:
+    if "region" in data.columns and data["region"].notna().any():
+        _reg = data.groupby("region").agg(
+            communes=("code_commune", "nunique"),
+            population=("population", "sum"),
+            prix_m2_moyen=("avg_price_m2", "mean"),
+            score_qualite=("critere_score", "mean") if "critere_score" in data.columns else ("avg_price_m2", "size"),
+        ).sort_values("prix_m2_moyen", ascending=False).reset_index()
+        _reg_display = _reg.copy()
+        _reg_display["population"] = _reg_display["population"].map(lambda x: f"{x:,.0f}".replace(",", " "))
+        _reg_display["prix_m2_moyen"] = _reg_display["prix_m2_moyen"].map(lambda x: f"{x:,.0f} €".replace(",", " "))
+        _reg_display["score_qualite"] = _reg_display["score_qualite"].map(lambda x: f"{x:.0f}/100")
+        st.dataframe(_reg_display.rename(columns={
+            "region": "Région", "communes": "Communes", "population": "Population",
+            "prix_m2_moyen": "Prix/m² moyen", "score_qualite": "Qualité de vie",
+        }), hide_index=True, use_container_width=True)
+        st.plotly_chart(
+            px.bar(_reg, x="region", y="prix_m2_moyen", height=320,
+                   labels={"region": "", "prix_m2_moyen": "Prix moyen (€/m²)"}),
+            use_container_width=True, key="bar_regions",
+        )
+    else:
+        st.caption("Pas de colonne région dans les données chargées.")
+
+with tab_dept_view:
+    _dep = data.dropna(subset=["code_departement"]).groupby("code_departement").agg(
+        communes=("code_commune", "nunique"),
+        population=("population", "sum"),
+        prix_m2_moyen=("avg_price_m2", "mean"),
+    ).sort_values("prix_m2_moyen", ascending=False).reset_index()
+    _dep_display = _dep.copy()
+    _dep_display["population"] = _dep_display["population"].map(lambda x: f"{x:,.0f}".replace(",", " "))
+    _dep_display["prix_m2_moyen"] = _dep_display["prix_m2_moyen"].map(lambda x: f"{x:,.0f} €".replace(",", " "))
+    st.dataframe(_dep_display.rename(columns={
+        "code_departement": "Département", "communes": "Communes",
+        "population": "Population", "prix_m2_moyen": "Prix/m² moyen",
+    }), hide_index=True, use_container_width=True, height=320)
+
+with tab_choro:
+    _geojson = load_dept_geojson()
+    if _geojson is None:
+        st.caption("Contours des départements indisponibles (pas de connexion) — la carte à bulles reste disponible plus haut.")
+    else:
+        _dep_map = data.dropna(subset=["code_departement"]).groupby("code_departement", as_index=False).agg(
+            prix_m2_moyen=("avg_price_m2", "mean"),
+        )
+        fig_choro = px.choropleth_mapbox(
+            _dep_map, geojson=_geojson, locations="code_departement",
+            featureidkey="properties.code", color="prix_m2_moyen",
+            color_continuous_scale="YlOrRd",
+            labels={"prix_m2_moyen": "Prix €/m²"},
+            center={"lat": 46.5, "lon": 2.3}, zoom=4.6, opacity=0.75, height=520,
+        )
+        fig_choro.update_layout(mapbox_style="open-street-map", margin=dict(l=0, r=0, t=0, b=0))
+        st.plotly_chart(fig_choro, use_container_width=True, key="choropleth_depts")
+        st.caption("Prix moyen au m² par département (choroplèthe) — moyenne des communes chargées.")
