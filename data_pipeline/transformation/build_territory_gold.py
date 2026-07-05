@@ -16,6 +16,7 @@ This file is what the Streamlit app reads.
 import argparse
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from data_pipeline.settings import file_path
@@ -329,22 +330,36 @@ def build_territory_gold(year: int) -> Path:
         for col in ["green_score", "education_score", "health_score", "services_score"]:
             frame[col] = 50.0
 
-    # 5. Transport score — depuis OSM si disponible, sinon GTFS, sinon neutre
+    # 5. Transport score — depuis OSM si disponible, sinon GTFS, sinon proxy population
     if osm is not None and "bus_stop_count" in frame.columns:
         pop = frame["population"].clip(lower=1).fillna(1)
-        frame["transport_score"] = _normalize_0_100(
-            (frame["bus_stop_count"].fillna(0) + frame["train_station_count"].fillna(0) * 5) / pop * 10_000
-        )
-        print(f"  transport_score calculé depuis OSM pour {frame['transport_score'].notna().sum():,} communes")
+        raw_transport = (
+            frame["bus_stop_count"].fillna(0)
+            + frame.get("train_station_count", pd.Series(0, index=frame.index)).fillna(0) * 5
+        ) / pop * 10_000
+
+        n_nonzero = int((raw_transport > 0).sum())
+        coverage_pct = n_nonzero / len(raw_transport) * 100
+        # Percentile rank clusters tied zeros at ~50% — need 20%+ coverage to be meaningful
+        if coverage_pct >= 20:
+            frame["transport_score"] = _normalize_0_100(raw_transport)
+            print(f"  transport_score depuis OSM ({n_nonzero:,} communes, {coverage_pct:.1f}%)")
+        else:
+            # Too sparse — fall back to log(population): big city = more transport options
+            print(f"  [warn] OSM transport sparse ({coverage_pct:.1f}%) — proxy population")
+            frame["transport_score"] = _normalize_0_100(np.log1p(frame["population"].fillna(0)))
+            print(f"  transport_score (proxy population) pour {len(frame):,} communes")
     else:
         print("Loading GTFS transport data...")
         gtfs = _load_gtfs()
         if gtfs is not None:
             frame = frame.merge(gtfs, on="code_commune", how="left")
-            frame["transport_score"] = _normalize_0_100(frame["stop_count"].fillna(0))
+            frame["transport_score"] = _normalize_0_100(np.log1p(frame["stop_count"].fillna(0)))
             print(f"  transport_score computed for {frame['transport_score'].notna().sum():,} communes")
         else:
-            frame["transport_score"] = 50.0
+            # Population proxy: larger cities = more transport options
+            frame["transport_score"] = _normalize_0_100(np.log1p(frame["population"].fillna(0)))
+            print(f"  transport_score (proxy population) pour {len(frame):,} communes")
 
     # 6. ARCEP network scores (optional)
     print("Loading ARCEP network data...")

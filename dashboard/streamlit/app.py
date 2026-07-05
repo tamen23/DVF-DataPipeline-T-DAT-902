@@ -440,10 +440,24 @@ if mode_expert:
         help="Plus la durée est longue, plus la mensualité est basse — mais plus vous payez d'intérêts au total.",
     )
     surface = st.sidebar.slider("Surface recherchée (m²)", min_value=20, max_value=120, value=50, step=5)
+    taux_credit_manuel = st.sidebar.number_input(
+        "Taux du crédit (%)",
+        min_value=0.5, max_value=8.0,
+        value=float(TAUX_MARCHE.get(duree, 3.65)),
+        step=0.05, format="%.2f",
+        help="Taux nominal annuel hors assurance. Le taux marché 2025 est affiché par défaut selon la durée.",
+    )
+    frais_notaire_pct = st.sidebar.slider(
+        "Frais de notaire (%)",
+        min_value=2.0, max_value=9.0, value=7.5, step=0.5,
+        help="Environ 7–8% pour l'ancien, 2–3% pour le neuf. Inclus dans le coût total mais non financés par la banque en général.",
+    )
 else:
     age = 30
     duree = 20
     surface = 45
+    taux_credit_manuel = None   # None = valeur marché automatique
+    frais_notaire_pct  = 7.5
 
 st.sidebar.markdown("---")
 
@@ -554,8 +568,13 @@ _fiabilite_seuil = 0 if fiabilite_min == "Toutes" else (10 if "10" in fiabilite_
 w_transport = w_vert = w_commerces = w_mobile = w_education = w_sante = 1
 
 # ── CALCUL CAPACITÉ D'EMPRUNT ─────────────────────────────────────────────────
-taux_base = TAUX_MARCHE.get(duree, 3.65)
+taux_base = taux_credit_manuel if taux_credit_manuel is not None else TAUX_MARCHE.get(duree, 3.65)
 taux_assur_pct = taux_assurance(age)
+# Frais de notaire : payés cash sur l'apport (la banque ne les finance pas)
+# Apport réel sur le bien = apport total - frais de notaire réservés
+# Les frais de notaire sont calculés sur le prix du bien au moment de la simulation
+# Pour le calcul de la carte : on utilise le ratio frais_notaire_pct pour estimer l'apport disponible
+_apport_frais_notaire_ratio = frais_notaire_pct / 100  # ex: 0.075 pour 7.5%
 mensualite_max = salaire_net * 0.33  # règle des 33%
 mensualite_assur_ratio = taux_assur_pct / 100 / 12
 
@@ -642,7 +661,11 @@ else:
     df_all["taxe_fonciere_estimee"] = taxe_fonciere_fixe if not _use_taux_reel else 700
 
 df_all["charges_tot_annuelles"] = charges_copro_annuelles + df_all["taxe_fonciere_estimee"] + df_all["frais_gestion"]
-df_all["montant_emprunte"] = (df_all["prix_bien_possible"] - apport).clip(lower=0)
+# Frais de notaire = prix_bien × taux_notaire (payés sur l'apport)
+# Apport disponible pour le bien = apport total - frais de notaire
+df_all["frais_notaire"] = df_all["prix_bien_possible"] * _apport_frais_notaire_ratio
+df_all["apport_sur_bien"] = (apport - df_all["frais_notaire"]).clip(lower=0)
+df_all["montant_emprunte"] = (df_all["prix_bien_possible"] - df_all["apport_sur_bien"]).clip(lower=0)
 df_all["mensualite_commune"] = df_all["montant_emprunte"].apply(
     lambda m: mensualite(m, taux_base, duree) + m * mensualite_assur_ratio
 )
@@ -1293,9 +1316,13 @@ with sim_col1:
     )
     taux_vacance = taux_vacance_pct / 100
 
+# Apport réel sur le bien = apport - frais de notaire de ce bien
+_sim_frais_notaire = sim_prix * _apport_frais_notaire_ratio
+_sim_apport_sur_bien = max(apport - _sim_frais_notaire, 0)
+
 sim = simulate_20ans(
     prix_bien=sim_prix,
-    apport=apport,
+    apport=_sim_apport_sur_bien,
     taux=taux_base,
     taux_assur_pct=taux_assur_pct,
     duree=duree,
@@ -1313,6 +1340,15 @@ sim = simulate_20ans(
 
 with sim_col2:
     st.markdown("#### Résultats")
+
+    # Résumé coût total avec frais de notaire
+    _cout_total = sim_prix + _sim_frais_notaire
+    st.caption(
+        f"💼 Coût total d'acquisition : **{int(_cout_total):,} €** "
+        f"(bien {int(sim_prix):,} € + notaire {int(_sim_frais_notaire):,} € à {frais_notaire_pct:.1f}%) "
+        f"· Taux crédit : **{taux_base:.2f}%** · Apport sur le bien : **{int(_sim_apport_sur_bien):,} €**"
+        .replace(",", " ")
+    )
 
     cf_mensuel = sim["cashflow_mensuel"]
     nb_achats = len(sim["achats"])
