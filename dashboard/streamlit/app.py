@@ -34,6 +34,15 @@ CRITERIA_COLUMNS = {
 
 
 @st.cache_data
+def load_predictions() -> pd.DataFrame | None:
+    """Latest ML price predictions (data_pipeline.ml.predict_prices), if any."""
+    files = sorted((DATA_LAKE / "ml").glob("price_predictions_*.parquet"))
+    if not files:
+        return None
+    return pd.read_parquet(files[-1])
+
+
+@st.cache_data
 def load_data() -> pd.DataFrame:
     if API_URL:
         try:
@@ -316,6 +325,22 @@ def simulate_20ans(
 st.set_page_config(page_title="HOMEPEDIA — Investisseur", layout="wide", page_icon="🏦")
 
 data = load_data()
+
+# Le générateur démo et l'API n'exposent pas toujours code_departement :
+# on le dérive du code INSEE (2 premiers caractères, 3 pour les DOM).
+if "code_departement" not in data.columns and "code_commune" in data.columns:
+    codes = data["code_commune"].astype(str)
+    data["code_departement"] = np.where(codes.str.startswith("97"), codes.str[:3], codes.str[:2])
+
+# ── Prédictions ML (optionnelles) ─────────────────────────────────────────────
+predictions = load_predictions()
+PREDICTION_YEAR = None
+if predictions is not None and "code_commune" in data.columns:
+    PREDICTION_YEAR = int(predictions["target_year"].iloc[0])
+    data = data.merge(
+        predictions[["code_commune", "predicted_avg_price_m2", "predicted_growth_pct"]],
+        on="code_commune", how="left",
+    )
 
 # ── SIDEBAR : Profil investisseur ─────────────────────────────────────────────
 st.sidebar.title("🏦 Mon profil investisseur")
@@ -702,14 +727,25 @@ else:
     _pool["score_final"] = _pool["critere_score"] * 0.5 + _pool["cf_norm"] * 0.5
     top = _pool.sort_values("score_final", ascending=False).head(10)
 
-    top_display = top[[
+    ranking_columns = [
         "nom_commune", "avg_price_m2", "prix_bien_possible",
         "loyer_estime", "cashflow_mensuel", "cashflow_net_fiscal",
         "nb_annonces_app", "rendement_brut", "rendement_net_fiscal",
         "impot_annuel", "annual_price_growth", "transaction_count",
-    ]].rename(columns={
+    ]
+    if PREDICTION_YEAR and "predicted_avg_price_m2" in top.columns:
+        ranking_columns.insert(2, "predicted_avg_price_m2")
+
+    # Colonnes absentes selon la source (démo/API vs pipeline complète) : NaN,
+    # les formateurs ci-dessous affichent alors "aucune donnée" / "N/A".
+    for _col in ranking_columns:
+        if _col not in top.columns:
+            top[_col] = float("nan")
+
+    top_display = top[ranking_columns].rename(columns={
         "nom_commune": "Commune",
         "avg_price_m2": "Prix/m² (DVF)",
+        "predicted_avg_price_m2": f"Prix estimé {PREDICTION_YEAR} (IA)",
         "prix_bien_possible": f"Prix bien ({surface}m²)",
         "loyer_estime": "Loyer/mois",
         "cashflow_mensuel": "Cash-flow brut/mois",
@@ -723,6 +759,10 @@ else:
     }).copy()
 
     top_display["Prix/m² (DVF)"] = top_display["Prix/m² (DVF)"].apply(lambda x: f"{x:,.0f} €".replace(",", " "))
+    if PREDICTION_YEAR and f"Prix estimé {PREDICTION_YEAR} (IA)" in top_display.columns:
+        top_display[f"Prix estimé {PREDICTION_YEAR} (IA)"] = top_display[f"Prix estimé {PREDICTION_YEAR} (IA)"].apply(
+            lambda x: f"{x:,.0f} €".replace(",", " ") if pd.notna(x) else "N/A"
+        )
     top_display[f"Prix bien ({surface}m²)"] = top_display[f"Prix bien ({surface}m²)"].apply(lambda x: f"{x:,.0f} €".replace(",", " "))
     top_display["Loyer/mois"] = top_display["Loyer/mois"].apply(lambda x: f"{x:.0f} €")
     top_display["Cash-flow brut/mois"] = top_display["Cash-flow brut/mois"].apply(lambda x: f"+{x:.0f} €" if x >= 0 else f"{x:.0f} €")
@@ -978,6 +1018,16 @@ with prof_col2:
     kpi5.metric("Réseau mobile", f"{sim_row.get('network_score', 0):.0f}/100")
     kpi6.metric("Transport", f"{sim_row.get('transport_score', 0):.0f}/100")
 
+    if PREDICTION_YEAR and pd.notna(sim_row.get("predicted_avg_price_m2")):
+        kpi7, kpi8 = st.columns(2)
+        kpi7.metric(
+            f"Prix estimé {PREDICTION_YEAR} (IA)",
+            f"{sim_row['predicted_avg_price_m2']:.0f} €/m²",
+            delta=f"{sim_row['predicted_growth_pct']:+.1f}%",
+            help="Prédiction RandomForest entraînée sur l'historique DVF (data_pipeline.ml.predict_prices).",
+        )
+        kpi8.metric("Croissance prédite", f"{sim_row['predicted_growth_pct']:+.1f}%")
+
     st.markdown("#### Annonces disponibles")
     code_commune = str(sim_row.get("code_commune", ""))
     dept = str(sim_row.get("code_departement", ""))
@@ -993,6 +1043,12 @@ with prof_col2:
     if "listings_commune" not in st.session_state:
         st.session_state.listings_commune = None
 
+    # Le dossier du script n'est pas toujours sur sys.path selon le lanceur
+    # (streamlit run vs AppTest) : on l'ajoute explicitement.
+    import sys
+    _script_dir = str(Path(__file__).resolve().parent)
+    if _script_dir not in sys.path:
+        sys.path.insert(0, _script_dir)
     from scraper_service import fetch_listings
 
     btn_achat, btn_location = st.columns(2)
@@ -1013,6 +1069,35 @@ with prof_col2:
                     postal_code=postal_code, pages=2, mode="location",
                 )
                 st.session_state.listings_commune = sim_commune
+
+# ── COMMUNES SIMILAIRES (IA k-NN) ──────────────────────────────────────────────
+st.markdown(f"#### 🤝 Communes similaires à {sim_commune} (IA)")
+try:
+    import sys
+    if str(PROJECT_ROOT) not in sys.path:
+        sys.path.insert(0, str(PROJECT_ROOT))
+    from data_pipeline.ml.similar_communes import find_similar
+
+    similar = find_similar(data, str(sim_row.get("code_commune", "")), top=5)
+    if similar.empty:
+        st.caption("Pas assez de données de scores pour calculer des communes similaires.")
+    else:
+        sim_cols = st.columns(len(similar))
+        for col, (_, srow) in zip(sim_cols, similar.iterrows()):
+            price = srow.get("avg_price_m2")
+            col.metric(
+                srow["nom_commune"],
+                f"{price:.0f} €/m²" if pd.notna(price) else "—",
+                delta=f"similarité {srow['similarity']:.0f}/100",
+                delta_color="off",
+            )
+        st.caption(
+            "Recommandation k-NN sur les vecteurs de scores territoriaux "
+            "(transport, réseau, espaces verts, services, éducation, santé…) — "
+            "data_pipeline.ml.similar_communes."
+        )
+except ImportError:
+    st.caption("scikit-learn non installé — `pip install scikit-learn` pour activer les recommandations.")
 
 if st.session_state.get("listings") is not None:
     result = st.session_state.listings

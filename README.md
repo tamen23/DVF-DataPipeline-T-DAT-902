@@ -63,6 +63,7 @@ homepedia/
 │   ├── generation/       # demo data generator
 │   ├── transformation/   # bronze/gold builders, silver listings
 │   ├── spark_jobs/       # PySpark gold aggregation (USE_SPARK=1)
+│   ├── ml/               # IA: prédiction de prix + communes similaires
 │   ├── streaming/        # Kafka producers, scrapers, bronze consumer
 │   ├── export/           # PostgreSQL/PostGIS loader
 │   └── quality_checks/
@@ -177,5 +178,8 @@ http://localhost:3000  (admin / homepedia) — folder HOMEPEDIA
 - Streamlit dashboard reading the API with local-parquet fallback
 - Grafana BI dashboards auto-provisioned over PostgreSQL (Power BI views
   remain documented in docs/powerbi_views.md as an alternative)
+- IA: prédiction de prix par commune (RandomForest sur l'historique DVF)
+  et recommandation de communes similaires (k-NN sur les scores) — colonnes
+  « Prix estimé (IA) » et « Communes similaires » dans le dashboard
 - CI on GitHub Actions: syntax checks, compose validation, dbt parse,
   and a pipeline smoke test on the sample DVF file

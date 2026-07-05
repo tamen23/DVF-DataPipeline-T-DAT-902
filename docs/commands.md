@@ -116,6 +116,21 @@ uvicorn backend.app.main:app --reload
 # http://localhost:8000/docs
 ```
 
+## IA (prédictions + recommandations)
+
+```bash
+# Prédiction du prix au m² par commune (RandomForest sur l'historique gold,
+# nécessite au moins 2 années de gold — la pipeline en produit 2 par run)
+python -m data_pipeline.ml.predict_prices --target-year 2026
+
+# Communes similaires (k-NN sur les scores territoriaux)
+python -m data_pipeline.ml.similar_communes --commune 75056 --top 5
+```
+
+Le dashboard Streamlit affiche automatiquement la colonne « Prix estimé (IA) »
+et les « Communes similaires » dès que `gold/ml/price_predictions_*.parquet`
+existe. La pipeline lance la prédiction à l'étape [9/11].
+
 ## Grafana (BI)
 
 ```bash

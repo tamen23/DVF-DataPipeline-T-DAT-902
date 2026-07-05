@@ -20,28 +20,28 @@ echo ========================================
 echo.
 
 REM --- Ingestion ---
-echo [1/10] Téléchargement des communes...
+echo [1/11] Téléchargement des communes...
 py -m data_pipeline.ingestion.ingest_communes
 IF %ERRORLEVEL% NEQ 0 (echo ERREUR: ingest_communes & pause & exit /b 1)
 
 echo.
-echo [2/10] Téléchargement ARCEP...
+echo [2/11] Téléchargement ARCEP...
 py -m data_pipeline.ingestion.ingest_arcep
 IF %ERRORLEVEL% NEQ 0 (echo ERREUR: ingest_arcep & pause & exit /b 1)
 
 echo.
-echo [3/10] Téléchargement DVF %PREV_YEAR% (pour calcul YoY)...
+echo [3/11] Téléchargement DVF %PREV_YEAR% (pour calcul YoY)...
 py -m data_pipeline.ingestion.ingest_dvf --year %PREV_YEAR%
 IF %ERRORLEVEL% NEQ 0 (echo ERREUR: ingest_dvf %PREV_YEAR% & pause & exit /b 1)
 
 echo.
-echo [4/10] Téléchargement DVF %YEAR%...
+echo [4/11] Téléchargement DVF %YEAR%...
 py -m data_pipeline.ingestion.ingest_dvf --year %YEAR%
 IF %ERRORLEVEL% NEQ 0 (echo ERREUR: ingest_dvf %YEAR% & pause & exit /b 1)
 
 REM --- Transformation Bronze -> Silver -> Gold ---
 echo.
-echo [5/10] Bronze + Silver + Gold DVF %PREV_YEAR%...
+echo [5/11] Bronze + Silver + Gold DVF %PREV_YEAR%...
 py -m data_pipeline.transformation.bronze_dvf --year %PREV_YEAR%
 IF %ERRORLEVEL% NEQ 0 (echo ERREUR: bronze_dvf %PREV_YEAR% & pause & exit /b 1)
 py -m data_pipeline.cleaning.silver_dvf --year %PREV_YEAR%
@@ -50,7 +50,7 @@ py -m %GOLD_MODULE% --year %PREV_YEAR%
 IF %ERRORLEVEL% NEQ 0 (echo ERREUR: gold %PREV_YEAR% & pause & exit /b 1)
 
 echo.
-echo [6/10] Bronze + Silver + Gold DVF %YEAR%...
+echo [6/11] Bronze + Silver + Gold DVF %YEAR%...
 py -m data_pipeline.transformation.bronze_dvf --year %YEAR%
 IF %ERRORLEVEL% NEQ 0 (echo ERREUR: bronze_dvf %YEAR% & pause & exit /b 1)
 py -m data_pipeline.cleaning.silver_dvf --year %YEAR%
@@ -59,22 +59,28 @@ py -m %GOLD_MODULE% --year %YEAR%
 IF %ERRORLEVEL% NEQ 0 (echo ERREUR: gold %YEAR% & pause & exit /b 1)
 
 echo.
-echo [7/10] Contrôles qualité gold %YEAR%...
+echo [7/11] Contrôles qualité gold %YEAR%...
 py -m data_pipeline.quality_checks.check_gold --year %YEAR%
 IF %ERRORLEVEL% NEQ 0 (echo ERREUR: check_gold & pause & exit /b 1)
 
 echo.
-echo [8/10] Build Territory Gold %YEAR%...
+echo [8/11] Build Territory Gold %YEAR%...
 py -m data_pipeline.transformation.build_territory_gold --year %YEAR%
 IF %ERRORLEVEL% NEQ 0 (echo ERREUR: build_territory_gold & pause & exit /b 1)
 
 echo.
-echo [9/10] Upload vers HDFS...
+echo [9/11] Prédictions IA (RandomForest sur l'historique DVF)...
+SET /A TARGET_YEAR=%YEAR%+2
+py -m data_pipeline.ml.predict_prices --target-year %TARGET_YEAR%
+IF %ERRORLEVEL% NEQ 0 (echo   [warn] prédiction IA sautée)
+
+echo.
+echo [10/11] Upload vers HDFS...
 py -m data_pipeline.ingestion.upload_to_hdfs --year %YEAR%
 IF %ERRORLEVEL% NEQ 0 (echo ERREUR: upload_to_hdfs & pause & exit /b 1)
 
 echo.
-echo [10/10] Chargement PostgreSQL (dbt)...
+echo [11/11] Chargement PostgreSQL (dbt)...
 IF "%SKIP_POSTGRES%"=="1" (
     echo   [skip] SKIP_POSTGRES=1
 ) ELSE (

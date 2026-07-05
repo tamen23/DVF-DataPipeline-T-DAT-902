@@ -22,47 +22,51 @@ echo ""
 
 set -e  # Stop on error
 
-echo "[1/10] Téléchargement des communes..."
+echo "[1/11] Téléchargement des communes..."
 python -m data_pipeline.ingestion.ingest_communes
 
 echo ""
-echo "[2/10] Téléchargement ARCEP..."
+echo "[2/11] Téléchargement ARCEP..."
 python -m data_pipeline.ingestion.ingest_arcep
 
 echo ""
-echo "[3/10] Téléchargement DVF $PREV_YEAR (pour calcul YoY)..."
+echo "[3/11] Téléchargement DVF $PREV_YEAR (pour calcul YoY)..."
 python -m data_pipeline.ingestion.ingest_dvf --year $PREV_YEAR
 
 echo ""
-echo "[4/10] Téléchargement DVF $YEAR..."
+echo "[4/11] Téléchargement DVF $YEAR..."
 python -m data_pipeline.ingestion.ingest_dvf --year $YEAR
 
 echo ""
-echo "[5/10] Bronze + Silver + Gold DVF $PREV_YEAR..."
+echo "[5/11] Bronze + Silver + Gold DVF $PREV_YEAR..."
 python -m data_pipeline.transformation.bronze_dvf --year $PREV_YEAR
 python -m data_pipeline.cleaning.silver_dvf --year $PREV_YEAR
 python -m $GOLD_MODULE --year $PREV_YEAR
 
 echo ""
-echo "[6/10] Bronze + Silver + Gold DVF $YEAR..."
+echo "[6/11] Bronze + Silver + Gold DVF $YEAR..."
 python -m data_pipeline.transformation.bronze_dvf --year $YEAR
 python -m data_pipeline.cleaning.silver_dvf --year $YEAR
 python -m $GOLD_MODULE --year $YEAR
 
 echo ""
-echo "[7/10] Contrôles qualité gold $YEAR..."
+echo "[7/11] Contrôles qualité gold $YEAR..."
 python -m data_pipeline.quality_checks.check_gold --year $YEAR
 
 echo ""
-echo "[8/10] Build Territory Gold $YEAR..."
+echo "[8/11] Build Territory Gold $YEAR..."
 python -m data_pipeline.transformation.build_territory_gold --year $YEAR
 
 echo ""
-echo "[9/10] Upload vers HDFS..."
+echo "[9/11] Prédictions IA (RandomForest sur l'historique DVF)..."
+python -m data_pipeline.ml.predict_prices --target-year $((YEAR + 2)) || echo "  [warn] prédiction IA sautée (scikit-learn manquant ?)"
+
+echo ""
+echo "[10/11] Upload vers HDFS..."
 python -m data_pipeline.ingestion.upload_to_hdfs --year $YEAR
 
 echo ""
-echo "[10/10] Chargement PostgreSQL (dbt)..."
+echo "[11/11] Chargement PostgreSQL (dbt)..."
 if [ "${SKIP_POSTGRES:-0}" = "1" ]; then
   echo "  [skip] SKIP_POSTGRES=1"
 else

@@ -34,6 +34,7 @@ Open data (CSV/API)          Scrapers (SeLoger, LeBonCoin, CDC Habitat)
 - **Transformation**: pandas jobs by default; `data_pipeline/spark_jobs/aggregate_dvf.py` is a feature-equivalent PySpark implementation of the gold aggregation (`USE_SPARK=1 ./pipeline.sh`).
 - **Streaming** (`data_pipeline/streaming/`): Kafka producers run the scrapers, the bronze consumer batches listings to Parquet; `silver_listings` aggregates them per commune (postal → INSEE translation included).
 - **Quality** (`data_pipeline/quality_checks/`): gate between gold and publication; systematic anomalies fail the run, isolated outliers warn.
+- **ML** (`data_pipeline/ml/`): price prediction per commune (RandomForest on the gold DVF history, temporal holdout validation) and similar-communes recommendation (k-NN on the territory score vectors); surfaced in the dashboard as "Prix estimé (IA)" and "Communes similaires".
 - **Hive/HDFS** (docker-compose: namenode, datanode, metastore, hive-server): external tables over the gold/silver Parquet, queried by the API.
 - **PostgreSQL/PostGIS** (docker-compose: postgres): `data_pipeline/export/load_postgres.py` loads reference tables, transactions and scores; `database/schema.sql` is applied automatically.
 - **dbt** (`dbt/`): staging → intermediate → marts over the Postgres tables (`cd dbt && dbt run`).
