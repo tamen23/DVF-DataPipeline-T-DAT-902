@@ -82,9 +82,11 @@ def _load_arcep() -> pd.DataFrame | None:
 
     # ARCEP file has one row per operator per commune
     # Columns vary by year but typically include: codecommune, operateur, statut_4g, statut_5g
-    code_col = next((c for c in df.columns if "codecommune" in c or "code_commune" in c or "insee" in c), None)
-    g4_col = next((c for c in df.columns if "4g" in c and ("couv" in c or "statut" in c or "taux" in c)), None)
-    g5_col = next((c for c in df.columns if "5g" in c and ("couv" in c or "statut" in c or "taux" in c)), None)
+    code_col = next((c for c in df.columns if c in ("insee_com", "codecommune", "code_commune")), None)
+    if code_col is None:
+        code_col = next((c for c in df.columns if "com" in c and "insee" in c), None)
+    g4_col = next((c for c in df.columns if "4g" in c), None)
+    g5_col = next((c for c in df.columns if "5g" in c and "historique" not in c and "date" not in c and "m_hz" not in c), None)
 
     if code_col is None:
         print("  [warn] Could not identify commune code column in ARCEP file — skipping network score.")
@@ -121,7 +123,11 @@ def _load_osm() -> pd.DataFrame | None:
         print("  [warn] OSM data not found — green/education/health/services scores will be neutral.")
         print("         Run: python -m data_pipeline.ingestion.ingest_osm")
         return None
-    return pd.read_parquet(path)
+    df = pd.read_parquet(path)
+    if df.empty or "code_commune" not in df.columns:
+        print("  [warn] OSM data is empty — green/education/health/services scores will be neutral.")
+        return None
+    return df
 
 
 def _load_gtfs() -> pd.DataFrame | None:
@@ -131,6 +137,36 @@ def _load_gtfs() -> pd.DataFrame | None:
         print("         Run: python -m data_pipeline.ingestion.ingest_gtfs")
         return None
     return pd.read_parquet(path)
+
+
+def _load_loyers() -> pd.DataFrame | None:
+    path = file_path("raw", "loyers", "loyers_communes_2024.parquet")
+    if not path.exists():
+        print("  [warn] Loyers data not found — loyer_reel_m2 will be null. Run ingest_loyers.py to add it.")
+        return None
+    df = pd.read_parquet(path)
+    df = df.rename(columns={"INSEE_C": "code_commune"})
+    df["code_commune"] = df["code_commune"].astype(str).str.zfill(5)
+    return df[[
+        "code_commune",
+        "loyer_m2_app", "loyer_m2_app_min", "loyer_m2_app_max",
+        "loyer_m2_app12", "loyer_m2_app3",
+        "nb_annonces_app", "qualite_app",
+        "marche_locatif_actif",
+    ]]
+
+
+def _load_taxe_fonciere() -> pd.DataFrame | None:
+    path = file_path("raw", "taxe_fonciere", "taux_tfb_communes.parquet")
+    if not path.exists():
+        print("  [warn] Taxe foncière non disponible — run ingest_taxe_fonciere.py")
+        return None
+    df = pd.read_parquet(path)
+    df["code_commune"] = df["code_commune"].astype(str).str.zfill(5)
+    cols = ["code_commune", "taux_tfb_dept"]
+    if "vl_m2_commune" in df.columns:
+        cols.append("vl_m2_commune")
+    return df[[c for c in cols if c in df.columns]]
 
 
 def _load_filosofi() -> pd.DataFrame | None:
@@ -298,7 +334,30 @@ def build_territory_gold(year: int) -> Path:
     else:
         frame["network_score"] = 50.0  # neutral fallback
 
-    # 7. INSEE income scores (optional)
+    # 7. Loyers réels ANIL (optional)
+    print("Loading loyers réels ANIL...")
+    loyers = _load_loyers()
+    if loyers is not None:
+        frame = frame.merge(loyers, on="code_commune", how="left")
+        frame["marche_locatif_actif"] = frame["marche_locatif_actif"].fillna(False)
+        print(f"  loyer_m2_app disponible pour {frame['loyer_m2_app'].notna().sum():,} communes")
+    else:
+        frame["loyer_m2_app"] = None
+        frame["loyer_m2_app12"] = None
+        frame["loyer_m2_app3"] = None
+        frame["nb_annonces_app"] = 0
+        frame["marche_locatif_actif"] = False
+
+    # 8. Taxe foncière (optional)
+    print("Loading taxe foncière bâtie...")
+    taxe = _load_taxe_fonciere()
+    if taxe is not None:
+        frame = frame.merge(taxe, on="code_commune", how="left")
+        print(f"  taux_tfb_dept disponible pour {frame['taux_tfb_dept'].notna().sum():,} communes")
+    else:
+        frame["taux_tfb"] = None
+
+    # 9. INSEE income scores (optional)
     print("Loading INSEE Filosofi data...")
     filosofi = _load_filosofi()
     if filosofi is not None:
@@ -341,6 +400,10 @@ def build_territory_gold(year: int) -> Path:
         "affordability_score", "transport_score", "network_score", "green_score",
         "services_score", "education_score", "health_score", "investment_potential_score", "income_score",
         "score_etudiant", "score_jeune_actif", "score_famille", "score_personne_agee", "score_investisseur",
+        "loyer_m2_app", "loyer_m2_app_min", "loyer_m2_app_max",
+        "loyer_m2_app12", "loyer_m2_app3",
+        "nb_annonces_app", "marche_locatif_actif",
+        "taux_tfb_dept", "vl_m2_commune",
     ]
     frame = frame[[c for c in keep if c in frame.columns]]
     frame = frame.dropna(subset=["latitude", "longitude", "avg_price_m2"])

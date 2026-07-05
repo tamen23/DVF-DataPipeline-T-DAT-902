@@ -10,7 +10,7 @@ from data_pipeline.settings import file_path
 
 # ARCEP open data — couverture mobile par commune (4G/5G)
 # Source: https://www.data.gouv.fr/fr/datasets/mon-reseau-mobile/
-ARCEP_URL = "https://www.data.gouv.fr/fr/datasets/r/35e52723-a0aa-4f57-a5dd-ff4f58c6ee75"
+ARCEP_URL = "https://data.arcep.fr/mobile/sites/2024_T3/2024_T3_sites_Metropole.csv"
 
 CHUNK_SIZE = 4 * 1024 * 1024
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 """
-Uploads local data lake Parquet files to HDFS.
+Uploads local data lake Parquet files to HDFS via docker exec (namenode container).
 Run this after the full pipeline to make data available to Hive.
 
 Usage:
@@ -15,7 +15,9 @@ from pathlib import Path
 
 from data_pipeline.settings import DATA_LAKE_PATH
 
-HDFS_BASE = "hdfs://namenode:8020/homepedia"
+NAMENODE_CONTAINER = "homepedia-namenode"
+HDFS_BASE = "/homepedia"
+CONTAINER_TMP = "/tmp/hdfs_upload"
 
 LAYERS_TO_UPLOAD = {
     "raw": [
@@ -32,35 +34,48 @@ LAYERS_TO_UPLOAD = {
 }
 
 
-def hdfs_mkdir(path: str) -> None:
-    subprocess.run(["hdfs", "dfs", "-mkdir", "-p", path], check=True)
+def _run(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess:
+    return subprocess.run(cmd, check=check, capture_output=True, text=True)
 
 
-def hdfs_put(local: Path, remote: str) -> None:
+def hdfs_mkdir(hdfs_path: str) -> None:
+    _run(["docker", "exec", NAMENODE_CONTAINER, "hdfs", "dfs", "-mkdir", "-p", hdfs_path])
+
+
+def hdfs_put(local: Path, hdfs_path: str) -> None:
     if not local.exists():
-        print(f"  [skip] {local} not found locally")
+        print(f"  [skip] {local.name} not found locally")
         return
-    hdfs_mkdir(remote.rsplit("/", 1)[0])
-    subprocess.run(["hdfs", "dfs", "-put", "-f", str(local), remote], check=True)
-    print(f"  Uploaded {local.name} → {remote}")
+
+    # Copy file into the container then push to HDFS
+    container_path = f"{CONTAINER_TMP}/{local.name}"
+    _run(["docker", "exec", NAMENODE_CONTAINER, "mkdir", "-p", CONTAINER_TMP])
+    _run(["docker", "cp", str(local), f"{NAMENODE_CONTAINER}:{container_path}"])
+
+    hdfs_dir = hdfs_path.rsplit("/", 1)[0]
+    hdfs_mkdir(hdfs_dir)
+    _run(["docker", "exec", NAMENODE_CONTAINER, "hdfs", "dfs", "-put", "-f", container_path, hdfs_path])
+
+    # Cleanup temp file
+    _run(["docker", "exec", NAMENODE_CONTAINER, "rm", "-f", container_path], check=False)
+    print(f"  Uploaded {local.name} → hdfs:{hdfs_path}")
 
 
 def upload_layer(layer: str, year: int | None = None) -> None:
     files = LAYERS_TO_UPLOAD.get(layer, [])
     for relative in files:
         local = DATA_LAKE_PATH / layer / relative
-        remote = f"{HDFS_BASE}/{layer}/{relative}"
-        hdfs_put(local, remote)
+        hdfs_path = f"{HDFS_BASE}/{layer}/{relative}"
+        hdfs_put(local, hdfs_path)
 
-    # Year-partitioned gold real estate
     if layer in ("gold", "all") and year:
         local = DATA_LAKE_PATH / "gold" / "real_estate" / str(year) / f"real_estate_commune_{year}.parquet"
-        remote = f"{HDFS_BASE}/gold/real_estate/annee={year}/real_estate_commune_{year}.parquet"
-        hdfs_put(local, remote)
+        hdfs_path = f"{HDFS_BASE}/gold/real_estate/annee={year}/real_estate_commune_{year}.parquet"
+        hdfs_put(local, hdfs_path)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Upload local Parquet files to HDFS for Hive.")
+    parser = argparse.ArgumentParser(description="Upload local Parquet files to HDFS via Docker.")
     parser.add_argument("--year", type=int, default=None)
     parser.add_argument("--layer", choices=["raw", "gold", "all"], default="all")
     args = parser.parse_args()
@@ -71,8 +86,7 @@ def main() -> None:
         print(f"── {layer} ──")
         upload_layer(layer, args.year)
 
-    print("\nDone. Run Hive schema to create tables:")
-    print("  beeline -u jdbc:hive2://localhost:10000 -f database/hive_schema.sql")
+    print("\nDone.")
 
 
 if __name__ == "__main__":

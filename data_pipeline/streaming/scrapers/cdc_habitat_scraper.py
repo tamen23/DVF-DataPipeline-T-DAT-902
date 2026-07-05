@@ -1,122 +1,176 @@
 from __future__ import annotations
 
 """
-CDC Habitat — Caisse des Dépôts et Consignations Habitat
-Source open data: https://www.data.gouv.fr/fr/organizations/cdc-habitat/
-
-CDC Habitat publishes open datasets on social housing (logement social) on DataGouv.
-This scraper fetches their latest datasets via the DataGouv API (no scraping needed —
-they have a proper open data API).
-
-Produces listings with: commune, type_logement, loyer, surface, nb_pieces
+CDC Habitat — scraper du site cdc-habitat.fr
+Utilise un POST pour la recherche (comme le form JS du site) afin d'obtenir
+les annonces filtrées par commune via le JSON searchBootstrap embarqué.
 """
 
-from datetime import datetime, timezone
+import json
+import re
+import time
 from typing import Iterator
-
-import requests
 
 from data_pipeline.streaming.scrapers.base_scraper import BaseScraper
 
-# DataGouv API — organization CDC Habitat
-DATAGOUV_ORG_API = "https://www.data.gouv.fr/api/1/organizations/cdc-habitat/datasets/?page_size=50"
-DATAGOUV_DATASET_API = "https://www.data.gouv.fr/api/1/datasets/{dataset_id}/resources/"
+CDC_BASE = "https://www.cdc-habitat.fr"
+CDC_SEARCH_URL = CDC_BASE + "/Recherche/show"
+CDC_LOT_URL = CDC_BASE + "/annonces-immobilieres/{typage}"
 
 
 class CdcHabitatScraper(BaseScraper):
-    """
-    Fetches CDC Habitat open datasets from DataGouv API.
-    No scraping — uses the official DataGouv REST API.
-    Returns social housing inventory records.
-    """
-
     source = "cdc_habitat"
     base_delay = 1.0
     jitter = 0.5
 
-    DATAGOUV_API = "https://www.data.gouv.fr/api/1"
-
-    def _get_datasets(self) -> list[dict]:
-        response = requests.get(
-            f"{self.DATAGOUV_API}/organizations/cdc-habitat/datasets/",
-            params={"page_size": 50},
-            timeout=30,
-            headers={"User-Agent": "homepedia/1.0"},
-        )
-        response.raise_for_status()
-        return response.json().get("data", [])
-
-    def _get_csv_resources(self, dataset_id: str) -> list[dict]:
-        response = requests.get(
-            f"{self.DATAGOUV_API}/datasets/{dataset_id}/resources/",
-            timeout=30,
-            headers={"User-Agent": "homepedia/1.0"},
-        )
-        response.raise_for_status()
-        return [r for r in response.json().get("data", []) if r.get("format", "").lower() == "csv"]
-
-    def _parse_csv_resource(self, url: str) -> Iterator[dict]:
-        import csv
-        import io
-
-        response = requests.get(url, timeout=120, headers={"User-Agent": "homepedia/1.0"})
-        response.raise_for_status()
-
-        reader = csv.DictReader(io.StringIO(response.text), delimiter=";")
-        for row in reader:
-            row = {k.lower().strip(): v.strip() for k, v in row.items() if k}
-            # Normalize common column names across CDC Habitat datasets
-            code_col = next((k for k in row if "insee" in k or "commune" in k), None)
-            loyer_col = next((k for k in row if "loyer" in k or "prix" in k), None)
-            surface_col = next((k for k in row if "surface" in k or "shab" in k), None)
-            type_col = next((k for k in row if "type" in k and "log" in k), None)
-
-            if not code_col:
-                continue
-
-            try:
-                listing = {
-                    "listing_id": f"cdc_{hash(str(row))}",
-                    "commune_code": str(row.get(code_col, "")).zfill(5),
-                    "city": row.get("commune", row.get("libelle_commune", "")),
-                    "property_type": row.get(type_col, "logement_social") if type_col else "logement_social",
-                    "surface_m2": float(row[surface_col].replace(",", ".")) if surface_col and row.get(surface_col) else None,
-                    "price": float(row[loyer_col].replace(",", ".")) if loyer_col and row.get(loyer_col) else None,
-                    "price_m2": None,
-                    "rooms": None,
-                    "postal_code": row.get("code_postal"),
-                    "url": url,
-                }
-                if listing["price"] and listing["surface_m2"] and listing["surface_m2"] > 0:
-                    listing["price_m2"] = round(listing["price"] / listing["surface_m2"], 2)
-                yield self._normalize(listing)
-            except (ValueError, TypeError):
-                continue
-
-    def scrape(self, location: str = "", pages: int = 1) -> Iterator[dict]:
+    def scrape(self, location: str = "", postal_code: str = "", typage: str = "vente") -> Iterator[dict]:
         """
-        location is ignored — CDC Habitat data covers all of France.
-        Fetches all available CSV datasets from their DataGouv organization.
+        Scrape les annonces CDC Habitat pour une commune via POST.
+        location : nom de la commune (ex: "Choisy-le-Roi")
+        postal_code : code postal (ex: "94600")
+        typage : "vente" ou "location"
         """
-        print("Fetching CDC Habitat datasets from DataGouv API...")
         try:
-            datasets = self._get_datasets()
-            print(f"  Found {len(datasets)} datasets")
+            from bs4 import BeautifulSoup
+        except ImportError:
+            print("  [warn] beautifulsoup4 non installe -- pip install beautifulsoup4")
+            return
 
-            for dataset in datasets:
-                dataset_id = dataset.get("id")
-                title = dataset.get("title", "")
-                print(f"  Processing: {title}")
+        # Format canonique attendu par le site
+        nom = location.upper().replace("-", " ")
+        if postal_code:
+            lieu = f"{nom} ({postal_code})"
+        else:
+            lieu = nom
 
-                try:
-                    resources = self._get_csv_resources(dataset_id)
-                    for resource in resources:
-                        url = resource.get("url")
-                        if url:
-                            yield from self._parse_csv_resource(url)
-                except Exception as e:
-                    print(f"    [warn] Failed to process dataset {dataset_id}: {e}")
-                    continue
+        print(f"  CDC Habitat POST search: '{lieu}'")
 
+        try:
+            time.sleep(self.base_delay)
+            resp = self.session.post(
+                CDC_SEARCH_URL,
+                data={"lbLieu": lieu, "cdTypage": typage, "nbLoyerMax": ""},
+                headers={"Referer": CDC_BASE + "/Recherche/"},
+                timeout=30,
+            )
+            resp.raise_for_status()
         except Exception as e:
-            print(f"  [error] CDC Habitat fetch failed: {e}")
+            print(f"  [warn] CDC Habitat inaccessible : {e}")
+            return
+
+        soup = BeautifulSoup(resp.text, "html.parser")
+
+        # Extrait le JSON searchBootstrap embarqué dans le script
+        bootstrap = None
+        for s in soup.find_all("script"):
+            src = s.string or ""
+            m = re.search(r"var searchBootstrap = (\{.*?\});", src, re.DOTALL)
+            if m:
+                try:
+                    bootstrap = json.loads(m.group(1))
+                except json.JSONDecodeError:
+                    continue
+                break
+
+        if not bootstrap:
+            print("  [warn] CDC Habitat: searchBootstrap non trouve")
+            return
+
+        lots = bootstrap.get("lots", [])
+        print(f"  CDC Habitat -> {len(lots)} annonces (hasLieu={bootstrap.get('hasLieu')})")
+
+        # Recupere les cartes HTML pour enrichir les donnees
+        cards = {self._card_key(c): c for c in soup.select(".residenceCard")}
+
+        for lot in lots:
+            try:
+                listing = self._build_listing(lot, cards, location, postal_code, typage)
+                if listing:
+                    yield self._normalize(listing)
+            except Exception:
+                continue
+
+    def _card_key(self, card) -> str:
+        link = card.find("a", href=True)
+        return link["href"] if link else ""
+
+    def _build_listing(self, lot: dict, cards: dict, city: str, postal_code: str, typage: str) -> dict | None:
+        id_lot = lot.get("id_lot", "")
+        id_article = lot.get("id_article", "")
+        lat = lot.get("latitude")
+        lon = lot.get("longitude")
+
+        # Prix depuis le JSON
+        prix_str = lot.get("nb_prix", "").replace(" ", "").replace("\xa0", "")
+        price = None
+        try:
+            price = float(prix_str) if prix_str else None
+        except ValueError:
+            pass
+
+        # Cherche la carte HTML correspondante (contient surface, pieces, type)
+        matching_card = None
+        for href, card in cards.items():
+            if id_lot in href or (id_article and id_article in href):
+                matching_card = card
+                break
+
+        surface = None
+        rooms = None
+        property_type = "appartement"
+        listing_url = CDC_BASE + f"/annonces-immobilieres/{typage}/{id_lot}"
+        real_city = city
+
+        if matching_card:
+            text = matching_card.get_text(" ", strip=True).replace("\xa0", " ")
+
+            surf_m = re.search(r"(\d+(?:[.,]\d+)?)\s*m[²2]", text)
+            if surf_m:
+                try:
+                    surface = float(surf_m.group(1).replace(",", "."))
+                except ValueError:
+                    pass
+
+            rooms_m = re.search(r"(\d+)\s*pi[eè]ce", text, re.IGNORECASE)
+            if rooms_m:
+                try:
+                    rooms = int(rooms_m.group(1))
+                except ValueError:
+                    pass
+
+            low = text.lower()
+            if "maison" in low:
+                property_type = "maison"
+            elif "studio" in low:
+                property_type = "studio"
+
+            link = matching_card.find("a", href=True)
+            if link:
+                href = link["href"]
+                listing_url = href if href.startswith("http") else CDC_BASE + href
+
+            city_m = re.search(r"([A-Z][A-Z\-\s]+)\s*\(\d{5}\)", text)
+            if city_m:
+                real_city = city_m.group(1).strip().title()
+
+        if price is None:
+            return None
+
+        price_m2 = None
+        if price and surface and surface > 0:
+            price_m2 = round(price / surface, 2)
+
+        return {
+            "listing_id": f"cdc_{id_lot}_{id_article}",
+            "commune_code": postal_code,
+            "city": real_city,
+            "property_type": property_type,
+            "surface_m2": surface,
+            "price": price,
+            "price_m2": price_m2,
+            "rooms": rooms,
+            "postal_code": postal_code,
+            "latitude": float(lat) if lat else None,
+            "longitude": float(lon) if lon else None,
+            "url": listing_url,
+        }

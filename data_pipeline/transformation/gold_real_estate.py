@@ -13,6 +13,14 @@ def build_gold_real_estate(year: int) -> None:
 
     transactions = pd.read_parquet(silver_path)
 
+    # Filter aberrant prices (data entry errors or missing surface)
+    before = len(transactions)
+    transactions = transactions[
+        (transactions["prix_m2"] >= 200) &
+        (transactions["prix_m2"] <= 30_000)
+    ]
+    print(f"  Filtered {before - len(transactions):,} aberrant price/m² rows ({len(transactions):,} kept)")
+
     grouped = (
         transactions.groupby(["code_commune", "nom_commune", "year"], dropna=False)
         .agg(
@@ -24,6 +32,11 @@ def build_gold_real_estate(year: int) -> None:
         )
         .reset_index()
     )
+
+    # Remove communes with too few transactions (unreliable averages)
+    before = len(grouped)
+    grouped = grouped[grouped["transaction_count"] >= 3]
+    print(f"  Removed {before - len(grouped):,} communes with < 3 transactions ({len(grouped):,} kept)")
 
     previous_year_path = file_path("gold", "real_estate", str(year - 1), f"real_estate_commune_{year - 1}.parquet")
     grouped["price_m2_yoy_variation"] = None
