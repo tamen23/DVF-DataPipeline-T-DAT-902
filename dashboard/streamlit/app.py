@@ -110,6 +110,24 @@ def load_data() -> pd.DataFrame:
     st.stop()
 
 
+def normalize_data(data: pd.DataFrame) -> pd.DataFrame:
+    """Normalise les colonnes selon la source (démo / API / pipeline complète)."""
+    data = data.copy()
+    if "code_departement" not in data.columns and "code_commune" in data.columns:
+        code_commune = data["code_commune"].astype(str).str.zfill(5)
+        data["code_departement"] = np.where(
+            code_commune.str.startswith(("97", "98")),
+            code_commune.str[:3],
+            code_commune.str[:2],
+        )
+    for column in ("loyer_m2_app", "loyer_m2_app12", "loyer_m2_app3"):
+        if column not in data.columns:
+            data[column] = np.nan
+    if "nb_annonces_app" not in data.columns:
+        data["nb_annonces_app"] = 0
+    return data
+
+
 def format_eur(v: float) -> str:
     return f"{v:,.0f} €".replace(",", " ")
 
@@ -277,6 +295,15 @@ def simulate_20ans(
     meuble: bool = True,
     horizon: int = 20,
     taux_vacance: float = 0.08,
+    loyer_growth_annuelle: float = 0.0,
+    charges_growth_annuelle: float = 2.0,
+    taux_endettement_max: float = 35.0,
+    revenus_loyers_banque_pct: float = 70.0,
+    mensualites_existantes: float = 0.0,
+    autres_revenus_mensuels: float = 0.0,
+    revente_annee: int = 20,
+    taxation_plus_value_pct: float = 36.2,
+    cout_total_projet: float | None = None,
 ) -> dict:
     """
     Simule le plan d'investissement sur 20 ans avec achats successifs.
@@ -294,7 +321,9 @@ def simulate_20ans(
     t_m = taux / 100 / 12
     t_a = taux_assur_pct / 100 / 12
     n = duree * 12
-    salaire_brut_mensuel = salaire_net_mensuel / 0.77  # estimation charges patronales/salariales
+    # Le crédit finance le coût TOTAL du projet (frais, travaux, meubles) si fourni
+    cout_finance = cout_total_projet if cout_total_projet is not None else prix_bien
+    salaire_brut_mensuel = (salaire_net_mensuel + autres_revenus_mensuels) / 0.77  # estimation bancaire simple
 
     def _impot_annuel_par_bien(loyer_annuel: float, charges_b: float, interets_b: float, prix_b: float) -> float:
         """Calcule l'impôt annuel pour un bien selon le régime fiscal."""
@@ -315,7 +344,7 @@ def simulate_20ans(
             self.achat_annee = achat_annee
             self.prix = prix
             self.valeur = prix
-            montant = max(prix - apport, 0)
+            montant = max(cout_finance - apport, 0)
             self.capital_rem = montant
             self.montant_initial = montant
             self.mensualite_credit = mensualite(montant, taux, duree) if montant > 0 else 0
@@ -359,15 +388,18 @@ def simulate_20ans(
                 b.step_mois()
 
         nb = len(biens)
+        # Indexation annuelle des loyers et inflation des charges
+        loyer_mensuel_annee = loyer_mensuel * (1 + loyer_growth_annuelle / 100) ** (annee - 1)
+        charges_annuelles_annee = charges_annuelles * (1 + charges_growth_annuelle / 100) ** (annee - 1)
         # Loyers encaissés = loyer * (1 - taux_vacance) pour tenir compte des mois vides
-        loyers_annuels = loyer_mensuel * 12 * nb * (1 - taux_vacance)
+        loyers_annuels = loyer_mensuel_annee * 12 * nb * (1 - taux_vacance)
         credits_annuels = sum(b.credit_mensuel_actuel() * 12 for b in biens)
-        charges_tot = charges_annuelles * nb
+        charges_tot = charges_annuelles_annee * nb
         interets_tot = sum(b.interets_annuels() for b in biens)
 
         # Impôts : calculés sur l'ensemble du parc
         impots_annuels = sum(
-            _impot_annuel_par_bien(loyer_mensuel * 12, charges_annuelles, b.interets_annuels(), b.prix)
+            _impot_annuel_par_bien(loyer_mensuel_annee * 12, charges_annuelles_annee, b.interets_annuels(), b.prix)
             for b in biens
         )
 
@@ -383,22 +415,23 @@ def simulate_20ans(
         dette_totale = sum(b.capital_rem for b in biens)
         patrimoine = valeur_totale - dette_totale + cashflow_total_cumule
 
-        # Taux d'endettement actuel (méthode classique HCSF)
-        total_credits_mens = sum(b.credit_mensuel_actuel() for b in biens)
-        total_loyers_mens = loyer_mensuel * nb
-        revenus_bancaires = salaire_brut_mensuel + 0.70 * total_loyers_mens
+        # Taux d'endettement actuel (méthode HCSF paramétrable)
+        total_credits_mens = sum(b.credit_mensuel_actuel() for b in biens) + mensualites_existantes
+        total_loyers_mens = loyer_mensuel_annee * nb
+        revenus_bancaires = salaire_brut_mensuel + (revenus_loyers_banque_pct / 100) * total_loyers_mens
         taux_endt = (total_credits_mens / revenus_bancaires * 100) if revenus_bancaires > 0 else 100
 
         # Tenter un nouvel achat si on a l'apport
         while cashflow_libre >= apport_2eme:
-            # Vérification bancaire : est-ce que le nouveau crédit passe les 35% ?
-            nouveau_credit_mens = mensualite(prix_bien - apport, taux, duree) + (prix_bien - apport) * t_a
-            nouveaux_loyers = total_loyers_mens + loyer_mensuel
+            # Vérification bancaire : est-ce que le nouveau crédit passe le seuil ?
+            nouveau_montant = max(cout_finance - apport, 0)
+            nouveau_credit_mens = mensualite(nouveau_montant, taux, duree) + nouveau_montant * t_a
+            nouveaux_loyers = total_loyers_mens + loyer_mensuel_annee
             nouveaux_credits = total_credits_mens + nouveau_credit_mens
-            nouveaux_revenus = salaire_brut_mensuel + 0.70 * nouveaux_loyers
+            nouveaux_revenus = salaire_brut_mensuel + (revenus_loyers_banque_pct / 100) * nouveaux_loyers
             nouveau_taux_endt = (nouveaux_credits / nouveaux_revenus * 100) if nouveaux_revenus > 0 else 100
 
-            if nouveau_taux_endt > 35:
+            if nouveau_taux_endt > taux_endettement_max:
                 # Banque refuse — on note le blocage et on arrête d'essayer cette année
                 blocages_bancaires.append({
                     "annee": annee,
@@ -412,9 +445,9 @@ def simulate_20ans(
             biens.append(nouveau)
             achats.append({"annee": annee, "num_bien": len(biens), "prix": prix_bien})
             # Recalcul pour la prochaine itération du while
-            total_credits_mens = sum(b.credit_mensuel_actuel() for b in biens)
-            total_loyers_mens = loyer_mensuel * len(biens)
-            revenus_bancaires = salaire_brut_mensuel + 0.70 * total_loyers_mens
+            total_credits_mens = sum(b.credit_mensuel_actuel() for b in biens) + mensualites_existantes
+            total_loyers_mens = loyer_mensuel_annee * len(biens)
+            revenus_bancaires = salaire_brut_mensuel + (revenus_loyers_banque_pct / 100) * total_loyers_mens
             taux_endt = (total_credits_mens / revenus_bancaires * 100) if revenus_bancaires > 0 else 100
 
         annees.append(annee)
@@ -426,17 +459,28 @@ def simulate_20ans(
         cashflow_mensuel_net_series.append(round(cashflow_annuel_net / 12, 0))
         taux_endettement_series.append(round(taux_endt, 1))
 
-    mensualite_initiale = (mensualite(prix_bien - apport, taux, duree) +
-                           (prix_bien - apport) * t_a) if prix_bien > apport else 0
+    montant_initial = max(cout_finance - apport, 0)
+    mensualite_initiale = (
+        mensualite(montant_initial, taux, duree) + montant_initial * t_a
+    ) if montant_initial > 0 else 0
     impot_initial = _impot_annuel_par_bien(
         loyer_mensuel * 12, charges_annuelles,
-        (prix_bien - apport) * (taux / 100), prix_bien
+        montant_initial * (taux / 100), prix_bien
     )
     loyer_effectif_initial = loyer_mensuel * 12 * (1 - taux_vacance)
     cf_mensuel_net_initial = (loyer_effectif_initial - mensualite_initiale * 12
                               - charges_annuelles - impot_initial) / 12
 
+    # Hypothèse de revente : valeur du parc - dette - fiscalité sur la plus-value
+    revente_index = min(max(revente_annee, 1), len(annees)) - 1
+    nb_biens_revente = nb_biens_series[revente_index]
+    plus_value = max(valeur_totale_series[revente_index] - prix_bien * nb_biens_revente, 0)
+    impot_plus_value = plus_value * taxation_plus_value_pct / 100
+    net_revente = valeur_totale_series[revente_index] - dette_totale_series[revente_index] - impot_plus_value
+
     return {
+        "net_revente": round(net_revente, 0),
+        "impot_plus_value": round(impot_plus_value, 0),
         "annees": annees,
         "valeur_bien": valeur_totale_series,
         "dette_restante": dette_totale_series,
@@ -458,13 +502,7 @@ def simulate_20ans(
 # ══════════════════════════════════════════════════════════════════════════════
 st.set_page_config(page_title="HOMEPEDIA — Investisseur", layout="wide", page_icon="🏦")
 
-data = load_data()
-
-# Le générateur démo et l'API n'exposent pas toujours code_departement :
-# on le dérive du code INSEE (2 premiers caractères, 3 pour les DOM).
-if "code_departement" not in data.columns and "code_commune" in data.columns:
-    _codes = data["code_commune"].astype(str)
-    data["code_departement"] = np.where(_codes.str.startswith("97"), _codes.str[:3], _codes.str[:2])
+data = normalize_data(load_data())
 
 # ── Prédictions ML (optionnelles) ─────────────────────────────────────────────
 predictions = load_predictions()
@@ -478,25 +516,6 @@ if predictions is not None and "code_commune" in data.columns:
 
 # ── SIDEBAR : Profil investisseur ─────────────────────────────────────────────
 st.sidebar.title("🏦 Mon profil investisseur")
-
-# ── Persona : re-pondère le score qualité de vie du classement ────────────────
-PERSONAS = {
-    "Investisseur": None,  # pondération manuelle par critères (comportement historique)
-    "Étudiant": "score_etudiant",
-    "Jeune actif": "score_jeune_actif",
-    "Famille": "score_famille",
-    "Personne âgée": "score_personne_agee",
-}
-persona_label = st.sidebar.selectbox(
-    "👤 Persona",
-    list(PERSONAS),
-    index=0,
-    help="Chaque persona pondère différemment les critères (santé, transport, éducation…) — "
-         "poids documentés dans docs/personas.md, scores précalculés dans le gold.",
-)
-persona_col = PERSONAS[persona_label]
-if persona_col:
-    st.sidebar.caption(f"Classement pondéré pour **{persona_label}**.")
 
 mode_expert = st.sidebar.toggle("Mode expert", value=False,
     help="Activez pour accéder à tous les paramètres. En mode débutant, les valeurs sont pré-remplies avec des hypothèses standards.")
@@ -540,17 +559,35 @@ if mode_expert:
         step=0.05, format="%.2f",
         help="Taux nominal annuel hors assurance. Le taux marché 2025 est affiché par défaut selon la durée.",
     )
+    taux_assurance_override = st.sidebar.number_input(
+        "Assurance emprunteur (%)",
+        min_value=0.0, max_value=1.5, value=float(taux_assurance(age)), step=0.01,
+        help="Taux annuel d'assurance sur le capital emprunté. Vous pouvez le personnaliser si vous avez une offre bancaire.",
+    )
     frais_notaire_pct = st.sidebar.slider(
         "Frais de notaire (%)",
         min_value=2.0, max_value=9.0, value=7.5, step=0.5,
         help="Environ 7–8% pour l'ancien, 2–3% pour le neuf. Inclus dans le coût total mais non financés par la banque en général.",
     )
+    frais_agence_pct = st.sidebar.number_input("Frais d'agence (%)", 0.0, 10.0, 0.0, 0.1,
+        help="Part des frais d'agence si elle est à la charge de l'acheteur.")
+    frais_courtage = st.sidebar.number_input("Courtier + dossier bancaire (€)", 0, 10_000, 1_500, 100,
+        help="Frais fixes liés au financement : courtage, frais de dossier, garantie simplifiée.")
+    travaux = st.sidebar.number_input("Travaux (€)", 0, 100_000, 0, 1_000,
+        help="Budget travaux initial à financer dans le projet.")
+    ameublement = st.sidebar.number_input("Ameublement (€)", 0, 50_000, 5_000 if meuble else 0, 500,
+        help="Budget meubles initial, surtout utile en LMNP.")
 else:
     age = 30
     duree = 20
     surface = 45
     taux_credit_manuel = None   # None = valeur marché automatique
+    taux_assurance_override = None
     frais_notaire_pct  = 7.5
+    frais_agence_pct = 0.0
+    frais_courtage = 1_500
+    travaux = 0
+    ameublement = 5_000
 
 st.sidebar.markdown("---")
 
@@ -562,10 +599,19 @@ if mode_expert:
         help="Laissez à 0 pour utiliser le taux réel DGFiP par commune (recommandé). Saisissez une valeur pour forcer un montant fixe.")
     frais_gestion_pct = st.sidebar.slider("Gestion locative (%)", 0, 12, 0,
         help="Commission d'une agence si vous ne gérez pas vous-même (généralement 6–8%). Mettez 0 si vous gérez directement.")
+    entretien_annuel = st.sidebar.number_input("Entretien / provision travaux (€/an)", 0, 10_000, 500, 100,
+        help="Provision annuelle pour petites réparations, entretien et imprévus.")
+    vacance_locative_pct = st.sidebar.slider("Vacance locative (%)", 0, 20, 5,
+        help="Part du loyer annuel non encaissée à cause des périodes sans locataire.")
+    ajustement_loyer_pct = st.sidebar.slider("Ajustement du loyer estimé (%)", -30, 30, 0,
+        help="Permet d'être prudent ou optimiste par rapport à l'estimation automatique du loyer.")
 else:
     charges_copro     = 1_200
     taxe_fonciere_fixe = 0   # 0 = calculée par commune via taux DGFiP
     frais_gestion_pct = 0
+    entretien_annuel = 500
+    vacance_locative_pct = 5
+    ajustement_loyer_pct = 0
     st.sidebar.caption("💡 Charges standard : 1 200 €/an copro · taxe foncière calculée par commune (taux réel DGFiP) · gestion en direct")
 
 # taxe_fonciere_fixe = 0 → on calcule par commune | >0 → valeur uniforme
@@ -646,6 +692,31 @@ else:
 taux_global_fiscal = (tmi + 17.2) / 100
 
 st.sidebar.markdown("---")
+st.sidebar.markdown("### 🏦 Règles bancaires")
+if mode_expert:
+    taux_endettement_max = st.sidebar.slider(
+        "Seuil d'endettement HCSF (%)", 25, 40, 35,
+        help="Seuil maximum accepté par la banque dans la simulation multi-achats.",
+    )
+    revenus_loyers_banque_pct = st.sidebar.slider(
+        "Loyers retenus par la banque (%)", 50, 100, 70,
+        help="Les banques ne comptent souvent que 70% des loyers pour intégrer la vacance et le risque locatif.",
+    )
+    mensualites_existantes = st.sidebar.number_input(
+        "Crédits existants (€/mois)", 0, 5_000, 0, 50,
+        help="Mensualités déjà en cours : crédit auto, crédit immobilier existant, prêt étudiant, etc.",
+    )
+    autres_revenus = st.sidebar.number_input(
+        "Autres revenus nets mensuels (€)", 0, 20_000, 0, 100,
+        help="Autres revenus stables à ajouter au salaire : loyers existants, revenus du foyer, activité secondaire.",
+    )
+else:
+    taux_endettement_max = 35
+    revenus_loyers_banque_pct = 70
+    mensualites_existantes = 0
+    autres_revenus = 0
+
+st.sidebar.markdown("---")
 st.sidebar.markdown("### 🔍 Fiabilité des prix")
 st.sidebar.caption("Filtre basé sur le nombre de ventes DVF enregistrées dans la commune")
 
@@ -657,27 +728,50 @@ fiabilite_min = st.sidebar.radio(
 )
 _fiabilite_seuil = 0 if fiabilite_min == "Toutes" else (10 if "10" in fiabilite_min else 30)
 
-# Poids égaux pour le score qualité (critères non pondérables manuellement)
-w_transport = w_vert = w_commerces = w_mobile = w_education = w_sante = 1
+# ── Pondération du classement : l'utilisateur compose son profil ──────────────
+st.sidebar.markdown("---")
+st.sidebar.markdown("### ⚖️ Pondération du classement")
+if mode_expert:
+    poids_cashflow = st.sidebar.slider(
+        "Poids rentabilité (cash-flow + rendement) (%)", 0, 100, 70, 5,
+        help="70% par défaut : 40% cash-flow + 30% rendement. Le reste va à la qualité territoriale.",
+    )
+    poids_qualite = 100 - poids_cashflow
+    st.sidebar.caption(f"Qualité territoriale : {poids_qualite}%")
+    with st.sidebar.expander("Critères territoriaux"):
+        w_transport = st.slider("Transport", 0, 5, 1)
+        w_vert = st.slider("Espaces verts", 0, 5, 1)
+        w_commerces = st.slider("Services", 0, 5, 1)
+        w_mobile = st.slider("Réseau mobile", 0, 5, 1)
+        w_education = st.slider("Éducation", 0, 5, 1)
+        w_sante = st.slider("Santé", 0, 5, 1)
+else:
+    poids_cashflow = 70
+    poids_qualite = 30
+    # Poids égaux pour le score qualité en mode débutant
+    w_transport = w_vert = w_commerces = w_mobile = w_education = w_sante = 1
 
 # ── CALCUL CAPACITÉ D'EMPRUNT ─────────────────────────────────────────────────
 taux_base = taux_credit_manuel if taux_credit_manuel is not None else TAUX_MARCHE.get(duree, 3.65)
-taux_assur_pct = taux_assurance(age)
-# Frais de notaire : payés cash sur l'apport (la banque ne les finance pas)
-# Apport réel sur le bien = apport total - frais de notaire réservés
-# Les frais de notaire sont calculés sur le prix du bien au moment de la simulation
-# Pour le calcul de la carte : on utilise le ratio frais_notaire_pct pour estimer l'apport disponible
-_apport_frais_notaire_ratio = frais_notaire_pct / 100  # ex: 0.075 pour 7.5%
-mensualite_max = salaire_net * 0.33  # règle des 33%
+taux_assur_pct = float(taux_assurance_override) if taux_assurance_override is not None else taux_assurance(age)
+revenus_mensuels = salaire_net + autres_revenus
+mensualite_max = max(revenus_mensuels * taux_endettement_max / 100 - mensualites_existantes, 0)
 mensualite_assur_ratio = taux_assur_pct / 100 / 12
+# Coût total du projet = prix du bien + frais proportionnels (notaire, agence)
+# + coûts fixes (courtage, travaux, ameublement si meublé)
+ratio_frais_acquisition = (frais_notaire_pct + frais_agence_pct) / 100
+_apport_frais_notaire_ratio = frais_notaire_pct / 100  # utilisé par la simulation
+couts_fixes_acquisition = frais_courtage + travaux + (ameublement if meuble else 0)
 
 # Capacité emprunt : résout mensualite(M, taux, duree) + M*assur/12 = mensualite_max
 # => M * [taux_m/(1-(1+taux_m)^-n) + assur_m] = mensualite_max
 taux_m = taux_base / 100 / 12
 n_m = duree * 12
-facteur = taux_m / (1 - (1 + taux_m) ** -n_m) + mensualite_assur_ratio
+facteur_credit = (1 / n_m) if taux_m == 0 else taux_m / (1 - (1 + taux_m) ** -n_m)
+facteur = facteur_credit + mensualite_assur_ratio
 capacite_emprunt = mensualite_max / facteur
-prix_max_bien = capacite_emprunt + apport
+budget_total_projet = capacite_emprunt + apport
+prix_max_bien = max((budget_total_projet - couts_fixes_acquisition) / (1 + ratio_frais_acquisition), 0)
 
 # Mensualité réelle avec ce bien
 mensualite_credit_val = mensualite(capacite_emprunt, taux_base, duree)
@@ -708,15 +802,16 @@ c1, c2, c3, c4, c5 = st.columns(5)
 c1.metric("Capacité d'emprunt", format_eur(capacite_emprunt))
 c2.metric("Prix max du bien", format_eur(prix_max_bien),
           delta=f"apport {format_eur(apport)}", delta_color="off")
-c3.metric("Mensualité max (33%)", format_eur(mensualite_max))
+c3.metric(f"Mensualité max ({taux_endettement_max}%)", format_eur(mensualite_max))
 c4.metric("Mensualité réelle", format_eur(mensualite_totale_val),
           delta=f"dont assurance {mensualite_assur_val:.0f} €", delta_color="off")
 c5.metric("Taux retenu", f"{taux_base}%", delta=f"sur {duree} ans", delta_color="off")
 
 st.info(
-    f"Avec **{format_eur(salaire_net)}/mois** de salaire, votre mensualité max est "
-    f"**{format_eur(mensualite_max)}** (règle des 33%). Vous pouvez emprunter jusqu'à "
-    f"**{format_eur(capacite_emprunt)}**, soit un bien à **{format_eur(prix_max_bien)}** avec votre apport."
+    f"Avec **{format_eur(revenus_mensuels)}/mois** de revenus retenus, votre mensualité disponible est "
+    f"**{format_eur(mensualite_max)}** (seuil {taux_endettement_max}% moins crédits existants). "
+    f"Vous pouvez emprunter jusqu'à **{format_eur(capacite_emprunt)}**, soit un bien à "
+    f"**{format_eur(prix_max_bien)}** après frais, travaux et apport."
 )
 
 st.divider()
@@ -727,17 +822,20 @@ st.subheader("Étape 2 — Communes où votre investissement s'autofinance")
 # Calcule les métriques sur TOUTES les communes (avant filtre budget)
 df_all = data.copy()
 df_all["prix_bien_possible"] = df_all["avg_price_m2"] * surface
-df_all["loyer_estime"] = df_all.apply(
+# Chaîne loyer : théorique (modèle/ANIL) → estimé (ajustement expert) → encaissé (vacance)
+df_all["loyer_theorique"] = df_all.apply(
     lambda r: loyer_estime(
         r["avg_price_m2"], surface, meuble,
         loyer_m2_reel=r.get("loyer_m2_app12") if surface <= 50 else r.get("loyer_m2_app3") if surface >= 65 else r.get("loyer_m2_app")
     ), axis=1
 )
+df_all["loyer_estime"] = (df_all["loyer_theorique"] * (1 + ajustement_loyer_pct / 100)).clip(lower=0)
+df_all["loyer_encaisse"] = df_all["loyer_estime"] * (1 - vacance_locative_pct / 100)
 df_all["loyer_source"] = df_all.apply(
     lambda r: "ANIL 2024" if pd.notna(r.get("loyer_m2_app")) and r.get("loyer_m2_app", 0) > 0 else "Estimation",
     axis=1
 )
-df_all["frais_gestion"] = df_all["loyer_estime"] * frais_gestion_pct / 100 * 12
+df_all["frais_gestion"] = df_all["loyer_encaisse"] * frais_gestion_pct / 100 * 12
 
 # Taxe foncière : estimation par commune via VLC DGFiP + taux dept, ou valeur fixe
 if _use_taux_reel and "taux_tfb_dept" in df_all.columns and df_all["taux_tfb_dept"].notna().any():
@@ -754,24 +852,33 @@ if _use_taux_reel and "taux_tfb_dept" in df_all.columns and df_all["taux_tfb_dep
 else:
     df_all["taxe_fonciere_estimee"] = taxe_fonciere_fixe if not _use_taux_reel else 700
 
-df_all["charges_tot_annuelles"] = charges_copro_annuelles + df_all["taxe_fonciere_estimee"] + df_all["frais_gestion"]
-# Frais de notaire = prix_bien × taux_notaire (payés sur l'apport)
-# Apport disponible pour le bien = apport total - frais de notaire
+df_all["charges_tot_annuelles"] = (
+    charges_copro_annuelles
+    + entretien_annuel
+    + df_all["taxe_fonciere_estimee"]
+    + df_all["frais_gestion"]
+)
+# Coût total du projet = prix + frais proportionnels (notaire, agence) + coûts fixes
 df_all["frais_notaire"] = df_all["prix_bien_possible"] * _apport_frais_notaire_ratio
-df_all["apport_sur_bien"] = (apport - df_all["frais_notaire"]).clip(lower=0)
-df_all["montant_emprunte"] = (df_all["prix_bien_possible"] - df_all["apport_sur_bien"]).clip(lower=0)
+df_all["cout_acquisition_total"] = (
+    df_all["prix_bien_possible"] * (1 + ratio_frais_acquisition)
+    + couts_fixes_acquisition
+)
+df_all["montant_emprunte"] = (df_all["cout_acquisition_total"] - apport).clip(lower=0)
 df_all["mensualite_commune"] = df_all["montant_emprunte"].apply(
     lambda m: mensualite(m, taux_base, duree) + m * mensualite_assur_ratio
 )
 # ── CALCUL FISCAL ─────────────────────────────────────────────────────────────
 df_all["interets_annuels"] = df_all["montant_emprunte"] * taux_base / 100
 
-_loyer_nu_annuel   = df_all["loyer_estime"] * 12
-_loyer_lmnp_annuel = df_all["loyer_estime"] * 1.15 * 12
+# Loyer annuel encaissé (après ajustement et vacance) — le +15% meublé est
+# déjà porté par loyer_estime(), on ne le double plus ici.
+_loyer_nu_annuel   = df_all["loyer_encaisse"] * 12
+_loyer_lmnp_annuel = df_all["loyer_encaisse"] * 12
 _loyer_regime = _loyer_lmnp_annuel if "LMNP" in regime_fiscal else _loyer_nu_annuel
 
 _amort_bien    = df_all["prix_bien_possible"] * 0.025
-_amort_meubles = df_all["prix_bien_possible"] * 0.10 * 0.20
+_amort_meubles = (ameublement if meuble else 0) * 0.20  # amortissement du budget meubles réel
 
 if regime_fiscal == "LMNP - Réel (amortissement)":
     _base = (_loyer_lmnp_annuel - df_all["charges_tot_annuelles"]
@@ -802,12 +909,13 @@ df_all["cashflow_net_fiscal"] = (
 )
 
 df_all["rendement_brut"] = df_all.apply(lambda r: rendement_brut_commune(r["avg_price_m2"]), axis=1)
+# Rendements rapportés au coût TOTAL du projet (frais, travaux, meubles inclus)
 df_all["rendement_net"] = (
-    (_loyer_regime - df_all["charges_tot_annuelles"]) / df_all["prix_bien_possible"].clip(lower=1) * 100
+    (_loyer_regime - df_all["charges_tot_annuelles"]) / df_all["cout_acquisition_total"].clip(lower=1) * 100
 ).clip(lower=0)
 df_all["rendement_net_fiscal"] = (
     (_loyer_regime - df_all["charges_tot_annuelles"] - df_all["impot_annuel"])
-    / df_all["prix_bien_possible"].clip(lower=1) * 100
+    / df_all["cout_acquisition_total"].clip(lower=1) * 100
 ).clip(lower=0)
 
 # Score qualité de vie pondéré par les critères sidebar
@@ -825,13 +933,8 @@ df_all["critere_score"] = sum(
     for col, w in _weights.items()
 )
 
-# Persona sélectionné : le score qualité de vie devient le score persona
-# précalculé dans le gold (pondérations de docs/personas.md).
-if persona_col and persona_col in df_all.columns:
-    df_all["critere_score"] = df_all[persona_col].fillna(50)
-
-# Filtre budget uniquement pour le tableau/ranking
-df = df_all[df_all["prix_bien_possible"] <= prix_max_bien * 1.1].copy()
+# Filtre budget sur le coût TOTAL du projet
+df = df_all[df_all["cout_acquisition_total"] <= budget_total_projet * 1.1].copy()
 
 # Communes autofinancées = cash-flow >= 0 (dans le budget)
 autofinancees = df[df["cashflow_mensuel"] >= 0].copy()
@@ -901,7 +1004,7 @@ if selected_dept:
     _pool = df_all[df_all["code_departement"] == selected_dept].copy()
 else:
     st.subheader("Top 10 communes où investir")
-    _pool = df_all[df_all["prix_bien_possible"] <= prix_max_bien * 1.1].copy()
+    _pool = df_all[df_all["cout_acquisition_total"] <= budget_total_projet * 1.1].copy()
 
 if _fiabilite_seuil > 0:
     _pool = _pool[_pool["transaction_count"].fillna(0) >= _fiabilite_seuil]
@@ -1049,14 +1152,16 @@ else:
     def _pct_rank(s):
         return s.rank(method="average", na_option="keep", pct=True).fillna(0.5) * 100
 
-    _pool["_score_cf"]   = _pct_rank(_pool["_cf_net_ajuste"])    # 40% — cash-flow réel après vacance
-    _pool["_score_rdt"]  = _pct_rank(_pool["_rdt_net_ajuste"])   # 30% — rendement net après vacance
-    _pool["_score_qdv"]  = _pct_rank(_pool["critere_score"])     # 30% — qualité de vie
+    _pool["_score_cf"]   = _pct_rank(_pool["_cf_net_ajuste"])    # cash-flow réel après vacance
+    _pool["_score_rdt"]  = _pct_rank(_pool["_rdt_net_ajuste"])   # rendement net après vacance
+    _pool["_score_qdv"]  = _pct_rank(_pool["critere_score"])     # qualité de vie
 
+    # Pondération utilisateur (sidebar ⚖️) : rentabilité vs qualité territoriale.
+    # La rentabilité conserve sa répartition interne 4:3 (cash-flow : rendement),
+    # défaut 70/30 = le mix historique 40/30/30.
     _pool["score_final"] = (
-        _pool["_score_cf"]  * 0.40 +
-        _pool["_score_rdt"] * 0.30 +
-        _pool["_score_qdv"] * 0.30
+        (_pool["_score_cf"] * (4 / 7) + _pool["_score_rdt"] * (3 / 7)) * poids_cashflow / 100
+        + _pool["_score_qdv"] * poids_qualite / 100
     )
 
     top = _pool.sort_values("score_final", ascending=False).head(_nb_resultats)
@@ -1386,9 +1491,16 @@ with sim_col1:
         "Prix du bien (€)", min_value=10_000, max_value=1_000_000,
         value=_sim_prix_val, step=5_000,
     )
+    _sim_cout_total_val = max(_sim_prix_val, int(sim_row.get("cout_acquisition_total", _sim_prix_val)))
+    sim_cout_total = st.number_input(
+        "Coût total du projet (€)", min_value=10_000, max_value=1_500_000,
+        value=_sim_cout_total_val, step=5_000,
+        help="Prix du bien + notaire + agence + travaux + ameublement + frais de financement.",
+    )
     sim_loyer = st.number_input(
-        "Loyer mensuel estimé (€)", min_value=200, max_value=5_000,
-        value=int(sim_row["loyer_estime"]), step=25,
+        "Loyer mensuel encaissé (€)", min_value=200, max_value=5_000,
+        value=int(sim_row.get("loyer_encaisse", sim_row["loyer_estime"])), step=25,
+        help="Loyer après ajustement expert et vacance locative.",
     )
     sim_appreciation = st.slider(
         "Appréciation annuelle du bien (%)", min_value=-2.0, max_value=5.0,
@@ -1420,6 +1532,34 @@ with sim_col1:
         help="Quand votre cash-flow cumulé atteint ce montant, vous pouvez solliciter un 2ème crédit",
     )
 
+    st.markdown("#### Hypothèses long terme")
+    if mode_expert:
+        scenario = st.selectbox("Scénario long terme", ["Neutre", "Optimiste", "Pessimiste"], index=0)
+        scenario_defaults = {
+            "Neutre": {"loyer": 1.0, "charges": 2.0, "plus_value": 36.2},
+            "Optimiste": {"loyer": 2.0, "charges": 1.0, "plus_value": 30.0},
+            "Pessimiste": {"loyer": 0.0, "charges": 3.0, "plus_value": 36.2},
+        }[scenario]
+        sim_loyer_growth = st.slider(
+            "Indexation annuelle des loyers (%)", -2.0, 5.0,
+            float(scenario_defaults["loyer"]), 0.1,
+        )
+        sim_charges_growth = st.slider(
+            "Inflation annuelle des charges (%)", 0.0, 6.0,
+            float(scenario_defaults["charges"]), 0.1,
+        )
+        revente_annee = st.slider("Hypothèse de revente (année)", 1, 20, 20)
+        taxation_plus_value_pct = st.slider(
+            "Fiscalité plus-value (%)", 0.0, 40.0,
+            float(scenario_defaults["plus_value"]), 0.1,
+        )
+    else:
+        st.caption("Scénario neutre : loyers +1%/an, charges +2%/an, revente année 20 (fiscalité 36,2%). Mode expert pour personnaliser.")
+        sim_loyer_growth = 1.0
+        sim_charges_growth = 2.0
+        revente_annee = 20
+        taxation_plus_value_pct = 36.2
+
     st.markdown("#### Risque de vacance locative")
     _tension = calcul_tension_locative(sim_row.to_dict())
     _couleur_badge = _tension["couleur"]
@@ -1443,13 +1583,13 @@ with sim_col1:
     )
     taux_vacance = taux_vacance_pct / 100
 
-# Apport réel sur le bien = apport - frais de notaire de ce bien
+# Le coût total du projet (notaire, agence, travaux… inclus) est financé :
+# l'apport n'est plus amputé séparément des frais de notaire.
 _sim_frais_notaire = sim_prix * _apport_frais_notaire_ratio
-_sim_apport_sur_bien = max(apport - _sim_frais_notaire, 0)
 
 sim = simulate_20ans(
     prix_bien=sim_prix,
-    apport=_sim_apport_sur_bien,
+    apport=apport,
     taux=taux_base,
     taux_assur_pct=taux_assur_pct,
     duree=duree,
@@ -1463,17 +1603,25 @@ sim = simulate_20ans(
     meuble=meuble,
     horizon=duree_simulation,
     taux_vacance=taux_vacance,
+    loyer_growth_annuelle=sim_loyer_growth,
+    charges_growth_annuelle=sim_charges_growth,
+    taux_endettement_max=taux_endettement_max,
+    revenus_loyers_banque_pct=revenus_loyers_banque_pct,
+    mensualites_existantes=mensualites_existantes,
+    autres_revenus_mensuels=autres_revenus,
+    revente_annee=revente_annee,
+    taxation_plus_value_pct=taxation_plus_value_pct,
+    cout_total_projet=sim_cout_total,
 )
 
 with sim_col2:
     st.markdown("#### Résultats")
 
-    # Résumé coût total avec frais de notaire
-    _cout_total = sim_prix + _sim_frais_notaire
+    # Résumé coût total du projet financé
     st.caption(
-        f"💼 Coût total d'acquisition : **{int(_cout_total):,} €** "
-        f"(bien {int(sim_prix):,} € + notaire {int(_sim_frais_notaire):,} € à {frais_notaire_pct:.1f}%) "
-        f"· Taux crédit : **{taux_base:.2f}%** · Apport sur le bien : **{int(_sim_apport_sur_bien):,} €**"
+        f"💼 Coût total du projet : **{int(sim_cout_total):,} €** "
+        f"(bien {int(sim_prix):,} € + notaire ~{int(_sim_frais_notaire):,} € à {frais_notaire_pct:.1f}% + frais/travaux/meubles) "
+        f"· Taux crédit : **{taux_base:.2f}%** · Apport : **{int(apport):,} €**"
         .replace(",", " ")
     )
 
@@ -1495,9 +1643,21 @@ with sim_col2:
     r4.metric(
         "Taux d'endettement an 1",
         f"{taux_endt_initial:.1f}%",
-        delta="✅ < 35%" if taux_endt_initial <= 35 else "⚠️ > 35%",
-        delta_color="normal" if taux_endt_initial <= 35 else "inverse",
-        help="Méthode classique HCSF : total crédits / (salaire brut + 70% loyers)",
+        delta=f"✅ < {taux_endettement_max}%" if taux_endt_initial <= taux_endettement_max else f"⚠️ > {taux_endettement_max}%",
+        delta_color="normal" if taux_endt_initial <= taux_endettement_max else "inverse",
+        help=f"Méthode HCSF paramétrable : total crédits / (revenus bancaires + {revenus_loyers_banque_pct}% loyers)",
+    )
+    r5, r6 = st.columns(2)
+    r5.metric(
+        f"Revente nette an {revente_annee}",
+        format_eur(sim["net_revente"]),
+        delta=f"plus-value taxée {format_eur(sim['impot_plus_value'])}",
+        delta_color="off",
+    )
+    r6.metric(
+        "Hypothèse loyers / charges",
+        f"+{sim_loyer_growth:.1f}% / +{sim_charges_growth:.1f}%",
+        delta="annuel", delta_color="off",
     )
 
     if nb_achats > 0:
@@ -1510,7 +1670,7 @@ with sim_col2:
         b = sim["blocages_bancaires"][0]
         st.warning(
             f"🏦 La banque bloque le {b['nb_biens'] + 1}ème achat en année **{b['annee']}** "
-            f"— taux d'endettement trop élevé ({b['taux_endt']}% > 35%). "
+            f"— taux d'endettement trop élevé ({b['taux_endt']}% > {taux_endettement_max}%). "
             f"Augmentez votre salaire ou réduisez le prix du bien."
         )
     elif cf_mensuel < 0:
@@ -1575,7 +1735,7 @@ with sim_col2:
         "Prix": format_eur(sim_prix),
         "Cash-flow net/mois": f"{cf_mensuel:+.0f} €",
         "Taux endettement": f"{taux_endt_an.get(1, 0):.1f}%",
-        "Accord banque": "✅" if taux_endt_an.get(1, 0) <= 35 else "⚠️",
+        "Accord banque": "✅" if taux_endt_an.get(1, 0) <= taux_endettement_max else "⚠️",
     }]
     for achat in sim["achats"]:
         te = taux_endt_an.get(achat["annee"], 0)
@@ -1585,12 +1745,12 @@ with sim_col2:
             "Prix": format_eur(achat["prix"]),
             "Cash-flow net/mois": f"{cf_mensuel:+.0f} €",
             "Taux endettement": f"{te:.1f}%",
-            "Accord banque": "✅" if te <= 35 else "⚠️ > 35%",
+            "Accord banque": "✅" if te <= taux_endettement_max else f"⚠️ > {taux_endettement_max}%",
         })
     st.dataframe(pd.DataFrame(plan_rows), hide_index=True, use_container_width=True)
     st.caption(
         "💡 **Taux d'endettement** calculé selon la méthode HCSF : "
-        "total crédits / (salaire brut + 70% loyers) ≤ 35%. "
+        f"total crédits / (revenus bancaires + {revenus_loyers_banque_pct}% loyers) ≤ {taux_endettement_max}%. "
         "La banque compte vos loyers à 70% seulement (pas 100%) pour couvrir la vacance locative."
     )
 
@@ -2079,9 +2239,6 @@ if len(_compare_choices) >= 2:
         for _label, _col in CRITERIA_COLUMNS.items():
             if _col in _comp.columns:
                 _comp_rows[_label] = _comp[_col].map(lambda x: f"{x:.0f}/100" if pd.notna(x) else "N/A")
-        if persona_col and persona_col in _comp.columns:
-            _comp_rows[f"Score {persona_label}"] = _comp[persona_col].map(
-                lambda x: f"{x:.0f}/100" if pd.notna(x) else "N/A")
         st.dataframe(
             pd.DataFrame(_comp_rows, index=_comp["nom_commune"]).T,
             use_container_width=True,

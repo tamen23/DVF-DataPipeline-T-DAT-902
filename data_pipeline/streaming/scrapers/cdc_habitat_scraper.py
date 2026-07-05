@@ -56,7 +56,7 @@ class CdcHabitatScraper(BaseScraper):
             resp.raise_for_status()
         except Exception as e:
             print(f"  [warn] CDC Habitat inaccessible : {e}")
-            return
+            raise RuntimeError(f"CDC Habitat inaccessible: {e}")
 
         soup = BeautifulSoup(resp.text, "html.parser")
 
@@ -74,7 +74,7 @@ class CdcHabitatScraper(BaseScraper):
 
         if not bootstrap:
             print("  [warn] CDC Habitat: searchBootstrap non trouve")
-            return
+            raise RuntimeError("CDC Habitat: searchBootstrap non trouve")
 
         lots = bootstrap.get("lots", [])
         print(f"  CDC Habitat -> {len(lots)} annonces (hasLieu={bootstrap.get('hasLieu')})")
