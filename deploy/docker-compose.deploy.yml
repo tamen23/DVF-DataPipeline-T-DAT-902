@@ -22,6 +22,10 @@ services:
       HOMEPEDIA_GRAFANA_URL: "http://74.208.33.89:3002"
     ports:
       - "8501:8501"
+    volumes:
+      # Le data lake du serveur (données réelles transférées) prime sur les
+      # données de démonstration cuites dans l'image au build.
+      - ../data_lake:/app/data_lake
     mem_limit: 900m
 
   postgres:
@@ -54,6 +58,8 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://homepedia:homepedia@postgres:5432/homepedia
+    volumes:
+      - ../data_lake:/app/data_lake
     command: >
       sh -c "python -m data_pipeline.ingestion.ingest_communes &&
              python -m data_pipeline.export.load_postgres --year 2023 --skip-transactions &&

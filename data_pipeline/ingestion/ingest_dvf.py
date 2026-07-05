@@ -17,6 +17,7 @@ DVF_URLS: dict[int, str] = {
     2022: "https://files.data.gouv.fr/geo-dvf/latest/csv/2022/full.csv.gz",
     2023: "https://files.data.gouv.fr/geo-dvf/latest/csv/2023/full.csv.gz",
     2024: "https://files.data.gouv.fr/geo-dvf/latest/csv/2024/full.csv.gz",
+    2025: "https://files.data.gouv.fr/geo-dvf/latest/csv/2025/full.csv.gz",
 }
 
 CHUNK_SIZE = 8 * 1024 * 1024  # 8 MB
