@@ -981,15 +981,20 @@ with col_map:
         f"🔢 Ventes DVF : {int(r['transaction_count']) if pd.notna(r.get('transaction_count')) else '?'} transactions"
     ), axis=1)
 
+    # Taille = population (petits points lisibles, grandes villes repérables) ;
+    # tri par cash-flow croissant pour dessiner les communes rentables AU-DESSUS.
+    map_display = map_display.sort_values("cashflow_affiche")
     fig_map = px.scatter_mapbox(
         map_display,
         lat="latitude", lon="longitude",
-        color="cashflow_mensuel",
-        size=map_display["cashflow_mensuel"].clip(lower=10).fillna(10),
+        color="cashflow_affiche",
+        size=map_display["population"].fillna(500).clip(lower=500),
+        size_max=13,
+        opacity=0.65,
         hover_name="nom_commune",
         hover_data={
             "latitude": False, "longitude": False,
-            "cashflow_mensuel": False,
+            "cashflow_affiche": False,
             "_tooltip": True,
         },
         color_continuous_scale="RdYlGn",
