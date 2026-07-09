@@ -15,7 +15,13 @@ COPY database/ database/
 COPY deploy/prepare_demo_data.py deploy/prepare_demo_data.py
 COPY deploy/load_demo_prices.py deploy/load_demo_prices.py
 
-# Génère les données de démonstration (territoires, historique, IA, NLP)
+# Parquets réels (24 752 communes, DVF 2022-2023, référentiel communes)
+COPY data_lake/gold/territories/ data_lake/gold/territories/
+COPY data_lake/gold/real_estate/2022/ data_lake/gold/real_estate/2022/
+COPY data_lake/gold/real_estate/2023/ data_lake/gold/real_estate/2023/
+COPY data_lake/raw/communes/ data_lake/raw/communes/
+
+# Génère historique 2019-2021 (backcast), prédictions IA 2026, NLP
 RUN python deploy/prepare_demo_data.py
 
 EXPOSE 8501

@@ -13,6 +13,19 @@ data_lake/gold/*
 !data_lake/gold/.gitkeep
 *.parquet
 *.duckdb
+
+# Parquets bundlés dans l'image Docker de déploiement (exceptions explicites)
+!data_lake/gold/territories/
+!data_lake/gold/territories/territory_scores.parquet
+!data_lake/gold/real_estate/
+!data_lake/gold/real_estate/2022/
+!data_lake/gold/real_estate/2022/real_estate_commune_2022.parquet
+!data_lake/gold/real_estate/2023/
+!data_lake/gold/real_estate/2023/real_estate_commune_2023.parquet
+!data_lake/raw/communes/
+!data_lake/raw/communes/communes.parquet
+!data_lake/raw/communes/departements.parquet
+!data_lake/raw/communes/regions.parquet
 logs/
 dbt/profiles.yml
 dbt/target/
