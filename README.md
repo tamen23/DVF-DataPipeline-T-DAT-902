@@ -1,192 +1,221 @@
-# HOMEPEDIA
+# HOMEPEDIA — Real-Estate & Territory Analytics Platform
 
-HOMEPEDIA is a Data Engineering and BI project for French housing and territorial decision-making.
+> A Big-Data pipeline that ranks French cities by attractiveness — combining property prices, demographics, income, and mobile-network coverage into a single interactive dashboard.
 
-Main question:
+**Epitech MSc Pro — T-DAT-902 (Data Engineering project).**
 
-> Where should someone live or invest in France according to the best compromise between housing prices, accessibility, mobile network, quality of life, and territorial indicators?
+HOMEPEDIA answers one question:
 
-## First App Version
+> **Where should you live or invest in France, given the best trade-off between cost, accessibility, and quality of life?**
 
-The current Streamlit app uses generated commune-level data to demonstrate the final HOMEPEDIA concept before the real datasets are fully connected.
+It ingests open data from several French public sources, cleans and transforms it through a Bronze → Silver → Gold data-lake pattern, stores it in Hadoop/Hive and PostgreSQL, and serves it through an interactive Streamlit dashboard with maps, city rankings, and multi-criteria comparison.
 
-It includes:
+---
 
-- persona selection: student, young worker, family, elderly person, investor
-- generated French communes
-- real-estate price per square meter
-- transport, mobile network, green spaces, services, education, health, and investment indicators
-- persona-based scoring
-- ranking table
-- map visualization
-- best-commune radar chart
+## Table of contents
 
-Generate the demo data:
+- [Features](#features)
+- [Architecture](#architecture)
+- [Tech stack](#tech-stack)
+- [Data sources](#data-sources)
+- [Prerequisites](#prerequisites)
+- [Quick start](#quick-start)
+- [Running the data pipeline](#running-the-data-pipeline)
+- [Launching the dashboard](#launching-the-dashboard)
+- [Project structure](#project-structure)
+- [Team](#team)
 
-```bash
-python -m data_pipeline.generation.generate_demo_territories
-```
+---
 
-Start the app:
+## Features
 
-```bash
-python -m streamlit run dashboard/streamlit/app.py
-```
+- **Real-estate analysis** — average price, price per m², transaction volume, year-over-year price evolution.
+- **Territory analysis** — population, density, median income, commune-to-commune comparison.
+- **Accessibility analysis** — 4G/5G mobile coverage (ARCEP), transport access.
+- **Visualization** — interactive dashboard, dynamic maps, city ranking, side-by-side comparison.
+- **Predictions** — a RandomForest model projects future prices from historical DVF data.
 
-## MVP Scope
-
-Version 1 focuses on:
-
-- DVF real estate transactions
-- French regions, departments, and communes
-- average price and price per square meter
-- annual evolution
-- commune ranking
-- BI-ready gold tables
-- Power BI model support
-- optional Streamlit prototype
-
-Version 2 adds mobile network, transport, and global scoring. Version 3 adds scraping, NLP, AI, and cloud deployment.
+---
 
 ## Architecture
 
-```text
-homepedia/
-├── data_lake/
-│   ├── raw/
-│   ├── bronze/
-│   ├── silver/
-│   └── gold/
-├── data_pipeline/
-│   ├── ingestion/        # one script per source + HDFS upload
-│   ├── cleaning/         # silver transformations
-│   ├── generation/       # demo data generator
-│   ├── transformation/   # bronze/gold builders, silver listings
-│   ├── spark_jobs/       # PySpark gold aggregation (USE_SPARK=1)
-│   ├── ml/               # IA: prédiction de prix + communes similaires
-│   ├── streaming/        # Kafka producers, scrapers, bronze consumer
-│   ├── export/           # PostgreSQL/PostGIS loader
-│   └── quality_checks/
-├── dbt/                  # staging -> intermediate -> marts (Postgres)
-├── airflow/              # DAG run by the compose airflow service
-├── database/             # schema.sql (Postgres) + hive_schema.sql (Hive)
-├── hadoop/               # HDFS/Hive container config
-├── backend/              # FastAPI over Hive
-├── dashboard/            # Streamlit (API-first) + Power BI docs
-└── docs/
+```
+Open data sources (DVF, INSEE, ARCEP, DataGouv)
+        |
+        v
+[ Ingestion ]  -> raw files downloaded (data_pipeline/ingestion)
+        |
+        v
+[ Bronze ]     -> raw structured (data_pipeline/transformation)
+        |
+        v
+[ Silver ]     -> cleaned & normalized (data_pipeline/cleaning)
+        |
+        v
+[ Gold ]       -> business aggregates, pandas or PySpark (data_pipeline/transformation | spark_jobs)
+        |
+        +--> HDFS / Hive        (analytical store)
+        +--> PostgreSQL + dbt   (serving layer for the dashboard)
+                   |
+                   v
+        [ Streamlit dashboard ] — maps, rankings, comparison
 ```
 
-## Quick Start
+Orchestration is available through **Apache Airflow**; the full run can also be triggered end-to-end with a single script (`pipeline.sh`).
 
-Create the environment:
+---
+
+## Tech stack
+
+| Layer            | Technologies |
+|------------------|--------------|
+| Ingestion / ETL  | Python, Pandas, Requests, BeautifulSoup |
+| Distributed      | PySpark, Hadoop (HDFS), Hive |
+| Streaming        | Kafka, Zookeeper |
+| Serving DB       | PostgreSQL, dbt |
+| Document store   | MongoDB |
+| Orchestration    | Apache Airflow |
+| Visualization    | Streamlit, Plotly, Folium (maps), Power BI |
+| Monitoring       | Grafana |
+| Infrastructure   | Docker, Docker Compose |
+
+---
+
+## Data sources
+
+- **DVF** — Demandes de Valeurs Foncières (property transactions)
+- **INSEE** — demographics & socio-economic indicators
+- **ARCEP** — mobile network (4G/5G) coverage
+- **DataGouv** — French geographic reference data (communes)
+
+---
+
+## Prerequisites
+
+- **Python 3.10+**
+- **Docker** and **Docker Compose** (for the Hadoop/Hive/PostgreSQL/Kafka stack)
+- **Java 11+** — only required if you run the Gold aggregation with PySpark (`USE_SPARK=1`)
+- ~10 GB free disk for the data lake + containers
+
+---
+
+## Quick start
 
 ```bash
-cd homepedia
-python3 -m venv .venv
-source .venv/bin/activate
+# 1. Clone
+git clone https://github.com/tamen23/DVF-DataPipeline-T-DAT-902.git
+cd DVF-DataPipeline-T-DAT-902
+
+# 2. Python environment
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-```
 
-Copy the environment file:
+# 3. Environment file
+cp .env.example .env             # then edit values if needed
 
-```bash
-cp .env.example .env
-```
-
-Start the infrastructure (HDFS, Hive, Postgres, Kafka, Airflow):
-
-```bash
+# 4. Start the infrastructure (Hadoop, Hive, PostgreSQL, Kafka, Grafana, Airflow…)
 docker compose up -d
+
+# 5. Run the pipeline for a given year (default 2023)
+./pipeline.sh 2023               # Windows: pipeline.bat 2023
+
+# 6. Launch the dashboard
+streamlit run dashboard/streamlit/app.py
 ```
 
-Create the Hive tables (once, after hive-server is up):
+Then open the dashboard URL that Streamlit prints (default `http://localhost:8501`).
+
+---
+
+## Running the data pipeline
+
+The pipeline runs in 11 stages: ingest communes & ARCEP, download DVF for the target
+year and the previous year (for year-over-year deltas), build Bronze/Silver/Gold layers,
+run quality checks, build the territory Gold table, train the price-prediction model,
+upload to HDFS, and load PostgreSQL via dbt.
 
 ```bash
-docker exec -i homepedia-hive-server beeline -u jdbc:hive2://localhost:10000 -n hive -f /dev/stdin < database/hive_schema.sql
+# Standard run for 2023
+./pipeline.sh 2023
+
+# Use PySpark for the Gold aggregation (requires Java)
+USE_SPARK=1 ./pipeline.sh 2023
+
+# Skip the PostgreSQL/dbt load (Hive-only run)
+SKIP_POSTGRES=1 ./pipeline.sh 2023
 ```
 
-Run the full pipeline (ingestion → gold → quality → HDFS → Postgres):
+On Windows, use `pipeline.bat 2023` (same stages).
+
+Individual stages can also be run directly, e.g.:
 
 ```bash
-./pipeline.sh 2023          # Linux/macOS (Windows: pipeline.bat 2023)
-USE_SPARK=1 ./pipeline.sh   # gold aggregation with PySpark (requires Java)
-SKIP_POSTGRES=1 ./pipeline.sh  # skip the Postgres/dbt branch
+python -m data_pipeline.ingestion.ingest_dvf --year 2023
+python -m data_pipeline.cleaning.silver_dvf --year 2023
+python -m data_pipeline.quality_checks.check_gold --year 2023
 ```
 
-Or step by step with a local DVF CSV:
+---
+
+## Launching the dashboard
 
 ```bash
-python -m data_pipeline.ingestion.ingest_dvf --input ../path/to/dvf.csv --year 2022
-python -m data_pipeline.transformation.bronze_dvf --year 2022
-python -m data_pipeline.cleaning.silver_dvf --year 2022
-python -m data_pipeline.transformation.gold_real_estate --year 2022
-python -m data_pipeline.quality_checks.check_gold --year 2022
+streamlit run dashboard/streamlit/app.py
 ```
 
-Load PostgreSQL and run the dbt marts (schema.sql is applied automatically):
+The dashboard reads from PostgreSQL (populated by the pipeline). If you only ran the
+pipeline with `SKIP_POSTGRES=1`, load PostgreSQL first:
 
 ```bash
 python -m data_pipeline.export.load_postgres --year 2023
-cp dbt/profiles.yml.example dbt/profiles.yml
-cd dbt && dbt run --profiles-dir .
 ```
 
-Orchestrate with Airflow instead of the shell scripts (UI on http://localhost:8081,
-admin password: `docker logs homepedia-airflow 2>&1 | grep -i password`):
+---
 
-```bash
-docker compose up -d airflow
-# then trigger the homepedia_dvf_pipeline DAG from the UI
+## Project structure
+
+```
+.
+├── data_pipeline/        # Core ETL — the heart of the project
+│   ├── ingestion/        #   downloaders (DVF, INSEE, ARCEP, communes, HDFS upload)
+│   ├── transformation/   #   Bronze + Gold layers
+│   ├── cleaning/         #   Silver layer (normalization)
+│   ├── spark_jobs/       #   PySpark alternatives for heavy aggregation
+│   ├── quality_checks/   #   data-quality gates
+│   ├── ml/               #   price-prediction model (RandomForest)
+│   ├── nlp/              #   text-analysis modules
+│   └── streaming/        #   Kafka producers/consumers
+├── dashboard/            # Streamlit app + Power BI assets
+├── dbt/                  # dbt models for the PostgreSQL serving layer
+├── airflow/              # Airflow DAGs for orchestration
+├── hadoop/               # Hadoop/Hive container config
+├── grafana/              # Grafana dashboards
+├── data_lake/            # Raw/Bronze/Silver/Gold storage
+├── database/             # SQL schema / init
+├── backend/              # FastAPI service
+├── docker-compose.yml    # Full infrastructure stack
+├── pipeline.sh           # End-to-end pipeline (Linux/macOS)
+├── pipeline.bat          # End-to-end pipeline (Windows)
+└── requirements.txt      # Python dependencies
 ```
 
-Start the API (reads Hive):
+---
 
-```bash
-uvicorn backend.app.main:app --reload
-```
+## Team
 
-Start the Streamlit dashboard (reads the API, falls back to local parquet):
+| Member  | Role |
+|---------|------|
+| Yanis   | Product Owner & Architecture |
+| Bilal   | Data Ingestion & Data Quality |
+| Lys     | PySpark & Transformations |
+| Paternus (Leo) | PostgreSQL & Orchestration |
+| Marie   | Power BI & Visualization |
 
-```bash
-HOMEPEDIA_API_URL=http://localhost:8000 python -m streamlit run dashboard/streamlit/app.py
-```
+---
 
-Open the BI dashboards (Grafana, auto-provisioned over PostgreSQL):
+## Notes
 
-```text
-http://localhost:3000  (admin / homepedia) — folder HOMEPEDIA
-```
-
-## Data Lake Layers
-
-- `raw`: original files, unchanged
-- `bronze`: standardized columns, typed files, Parquet
-- `silver`: cleaned and normalized business entities
-- `gold`: BI-ready marts and KPI tables
-
-## Current Deliverables
-
-- technical architecture (docs/architecture.md — matches the code)
-- dual serving: Hive external tables (HDFS) and PostgreSQL/PostGIS
-- ingestion for DVF, communes, ARCEP, INSEE, OSM, GTFS, loyers, taxe foncière
-- bronze, silver, and gold transformations with a quality gate
-- Kafka streaming: scrapers → producers → bronze consumer → silver listings
-- PySpark gold aggregation, interchangeable with pandas (USE_SPARK=1)
-- Airflow DAG runnable from the compose airflow service
-- dbt models (staging → marts) running on the loaded Postgres
-- FastAPI over Hive (parameterized queries, /territories bulk endpoint)
-- Streamlit dashboard reading the API with local-parquet fallback
-- Grafana BI dashboards auto-provisioned over PostgreSQL (Power BI views
-  remain documented in docs/powerbi_views.md as an alternative)
-- IA: prédiction de prix par commune (RandomForest sur l'historique DVF)
-  et recommandation de communes similaires (k-NN sur les scores) — colonnes
-  « Prix estimé (IA) » et « Communes similaires » dans le dashboard
-- analyse textuelle : sentiment FR + nuage de mots par commune calculés
-  sur les textes d'annonces scrapées (data_pipeline/nlp)
-- MongoDB : archivage non-relationnel du JSON brut des annonces Kafka
-- dashboard multi-niveaux : sélecteur de persona (étudiant, jeune actif,
-  famille, personne âgée, investisseur), historique de prix + prédiction,
-  comparateur de communes, agrégats région/département, choroplèthe des
-  prix, écart prix annonces vs ventes DVF
-- CI on GitHub Actions: syntax checks, compose validation, dbt parse,
-  and a pipeline smoke test on the sample DVF file
+- This is an academic project built for **Epitech MSc Pro (T-DAT-902)**.
+- Full history and every contributor's commits are preserved in this repository.
+- No live credentials are committed; copy `.env.example` to `.env` and fill in your own.
